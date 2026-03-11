@@ -4,6 +4,7 @@
 #' output grammar.
 #'
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @param join Join mode, either `"inner"` or `"left"`.
 #' @param query_prefix Prefix applied to query column names.
 #' @param subject_prefix Prefix applied to subject column names.

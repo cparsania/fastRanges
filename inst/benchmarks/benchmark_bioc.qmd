@@ -42,7 +42,7 @@ Compared engines:
 -   `fastRanges::fast_find_overlaps()` with `fast_build_index()` reuse
 -   `GenomicRanges::findOverlaps()`
 -   `GenomicRanges::findOverlaps()` with `GenomicRanges::GNCList()` pre-processing
--   `IRanges::findOverlaps(..., nthread = k)` for integer-range thread scaling
+-   `IRanges::findOverlaps(..., nthread = k)` for integer-range thread scaling (when supported by the installed IRanges version)
 
 Derived API benchmarks are also included for grouped overlap counting, overlap aggregation, and sliding-window overlap counts.
 
@@ -278,15 +278,28 @@ ggsave(file.path(fig_dir, "granges_speedup_line.png"), p_gr_speedup, width = 10,
 subject_ir <- simulate_iranges(as.integer(params$ir_subject_n), seed = params$seed + 1000L)
 query_ir <- simulate_iranges(as.integer(params$ir_query_n), seed = params$seed + 1001L)
 
+iranges_supports_nthread <- "nthread" %in% names(formals(IRanges::findOverlaps))
+iranges_engine_label <- if (iranges_supports_nthread) "IRanges_nthread" else "IRanges_serial"
+
+if (!iranges_supports_nthread) {
+  message("Installed IRanges::findOverlaps() has no `nthread` argument; using serial IRanges baseline.")
+}
+
 ir_scale_list <- vector("list", length(thread_grid))
 for (i in seq_along(thread_grid)) {
   th <- thread_grid[i]
+  iranges_runner <- if (iranges_supports_nthread) {
+    function() IRanges::findOverlaps(query_ir, subject_ir, nthread = th)
+  } else {
+    function() IRanges::findOverlaps(query_ir, subject_ir)
+  }
+
   local <- dplyr::bind_rows(
     time_engine("fastRanges_IRanges", function() fastRanges::fast_find_overlaps(query_ir, subject_ir, threads = th), params$iterations),
-    time_engine("IRanges_nthread", function() IRanges::findOverlaps(query_ir, subject_ir, nthread = th), params$iterations)
+    time_engine(iranges_engine_label, iranges_runner, params$iterations)
   )
 
-  ref_hits <- unique(local$hits[local$engine == "IRanges_nthread"])
+  ref_hits <- unique(local$hits[local$engine == iranges_engine_label])
   if (length(ref_hits) != 1L || any(local$hits != ref_hits[1])) {
     stop("Hit count mismatch in IRanges scaling benchmark")
   }

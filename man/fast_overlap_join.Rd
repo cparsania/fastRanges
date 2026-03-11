@@ -21,24 +21,37 @@ fast_overlap_join(
 \arguments{
 \item{query}{An \code{IRanges} or \code{GRanges} query object.}
 
-\item{subject}{An \code{IRanges}/\code{GRanges} object or a \code{fast_ranges_index}.}
+\item{subject}{An \code{IRanges}/\code{GRanges} object or a \code{fast_ranges_index}.
+Use \code{fast_build_index(subject)} when the same subject is reused across
+many overlap queries.}
 
 \item{join}{Join mode, either \code{"inner"} or \code{"left"}.}
 
-\item{max_gap}{Integer scalar maximum allowed gap. A value of \code{-1}
-requires direct overlap.}
+\item{max_gap}{Integer scalar maximum allowed gap between query and subject.
+A value of \code{-1} requires direct overlap according to \code{type}. Values
+\verb{>= 0} allow near matches separated by up to \code{max_gap} bases.}
 
-\item{min_overlap}{Integer scalar minimum overlap width.}
+\item{min_overlap}{Integer scalar minimum overlap width (in bases) required
+for a hit. Larger values are stricter.}
 
-\item{type}{Overlap mode: one of \code{"any"}, \code{"start"}, \code{"end"},
-\code{"within"}, or \code{"equal"}.}
+\item{type}{Overlap mode:
+\code{"any"}: any qualifying overlap (or gap-constrained hit when
+\code{max_gap >= 0});
+\code{"start"}: matching start coordinates;
+\code{"end"}: matching end coordinates;
+\code{"within"}: query fully contained in subject;
+\code{"equal"}: query and subject have identical start and end.}
 
-\item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
+\item{ignore_strand}{Logical scalar. For \code{GRanges}, if \code{FALSE}, comparisons
+follow strand-aware Bioconductor semantics. Ignored for non-genomic
+ranges.}
 
-\item{threads}{Integer scalar thread count.}
+\item{threads}{Integer scalar thread count. Use larger values on multicore
+machines for throughput-oriented workloads.}
 
 \item{deterministic}{Logical scalar. If \code{TRUE}, output is sorted by
-\verb{(query_id, subject_id)}.}
+\verb{(query_id, subject_id)}, giving stable ordering across thread counts.
+If \code{FALSE}, output order is unspecified.}
 
 \item{query_prefix}{Prefix applied to query column names.}
 
@@ -51,6 +64,42 @@ A \code{data.frame} with overlap ids and prefixed query/subject columns.
 Build a metadata-preserving overlap join with a consistent, tidy tabular
 output grammar.
 }
+\section{Overlap semantics}{
+
+Core interval semantics (ASCII schematic):
+
+\if{html}{\out{<div class="sourceCode text">}}\preformatted{type = "any"
+query  :    |------|
+subject: |------|
+
+type = "within"
+subject: |--------------|
+query  :    |------|
+
+type = "start"
+query  :    |------|
+subject:    |------------|
+
+type = "end"
+query  :       |------|
+subject: |------------|
+
+type = "equal"
+query  :    |------|
+subject:    |------|
+
+gap / min_overlap controls
+query  : |------|      |------| : subject
+               < gap >
+}\if{html}{\out{</div>}}
+
+The middle distance is the gap. A hit is allowed when this distance is
+\verb{<= max_gap} (for \code{max_gap >= 0}), and overlap width is \verb{>= min_overlap}.
+
+This argument grammar is intentionally aligned with Bioconductor overlap
+APIs (\code{IRanges} / \code{GenomicRanges}).
+}
+
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))

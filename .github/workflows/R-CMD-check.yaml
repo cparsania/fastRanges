@@ -43,6 +43,10 @@ jobs:
             any::rcmdcheck
           needs: check
 
+      - name: Verify overlap argument docs stay in sync
+        run: |
+          Rscript tools/check_overlap_doc_inheritance.R
+
       - name: Check
         run: |
           Rscript -e 'options(repos = BiocManager::repositories()); rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "warning")'

@@ -10,15 +10,10 @@ NULL
 #'
 #' @param query An `IRanges` or `GRanges` query object.
 #' @param subject An `IRanges`/`GRanges` object or a `fast_ranges_index`.
-#' @param max_gap Integer scalar maximum allowed gap. A value of `-1`
-#'   requires direct overlap.
-#' @param min_overlap Integer scalar minimum overlap width.
-#' @param type Overlap mode: one of `"any"`, `"start"`, `"end"`,
-#'   `"within"`, or `"equal"`.
-#' @param ignore_strand Logical scalar. Ignored for non-genomic ranges.
-#' @param threads Integer scalar thread count.
-#' @param deterministic Logical scalar. If `TRUE`, output is sorted by
-#'   `(query_id, subject_id)`.
+#'   Use `fast_build_index(subject)` when the same subject is reused across
+#'   many overlap queries.
+#' @template overlap_shared_args
+#' @template overlap_type_details
 #'
 #' @return A `S4Vectors::Hits` object.
 #' @export
@@ -91,6 +86,7 @@ fast_find_overlaps <- function(
 #' Count subject overlaps per query range.
 #'
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @return Integer vector with one element per query range.
 #' @export
 #'
@@ -126,6 +122,7 @@ fast_count_overlaps <- function(
 #' Return `TRUE` for queries that overlap at least one subject range.
 #'
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @return Logical vector with one element per query range.
 #' @export
 #'

@@ -28,20 +28,31 @@ for \code{GRanges}.}
 
 \item{step_width}{Integer scalar window step.}
 
-\item{max_gap}{Integer scalar maximum allowed gap. A value of \code{-1}
-requires direct overlap.}
+\item{max_gap}{Integer scalar maximum allowed gap between query and subject.
+A value of \code{-1} requires direct overlap according to \code{type}. Values
+\verb{>= 0} allow near matches separated by up to \code{max_gap} bases.}
 
-\item{min_overlap}{Integer scalar minimum overlap width.}
+\item{min_overlap}{Integer scalar minimum overlap width (in bases) required
+for a hit. Larger values are stricter.}
 
-\item{type}{Overlap mode: one of \code{"any"}, \code{"start"}, \code{"end"},
-\code{"within"}, or \code{"equal"}.}
+\item{type}{Overlap mode:
+\code{"any"}: any qualifying overlap (or gap-constrained hit when
+\code{max_gap >= 0});
+\code{"start"}: matching start coordinates;
+\code{"end"}: matching end coordinates;
+\code{"within"}: query fully contained in subject;
+\code{"equal"}: query and subject have identical start and end.}
 
-\item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
+\item{ignore_strand}{Logical scalar. For \code{GRanges}, if \code{FALSE}, comparisons
+follow strand-aware Bioconductor semantics. Ignored for non-genomic
+ranges.}
 
-\item{threads}{Integer scalar thread count.}
+\item{threads}{Integer scalar thread count. Use larger values on multicore
+machines for throughput-oriented workloads.}
 
 \item{deterministic}{Logical scalar. If \code{TRUE}, output is sorted by
-\verb{(query_id, subject_id)}.}
+\verb{(query_id, subject_id)}, giving stable ordering across thread counts.
+If \code{FALSE}, output order is unspecified.}
 }
 \value{
 A \code{data.frame} containing window coordinates and overlap counts.
@@ -49,6 +60,42 @@ A \code{data.frame} containing window coordinates and overlap counts.
 \description{
 Count overlaps in sliding windows across the coordinate span of \code{query}.
 }
+\section{Overlap semantics}{
+
+Core interval semantics (ASCII schematic):
+
+\if{html}{\out{<div class="sourceCode text">}}\preformatted{type = "any"
+query  :    |------|
+subject: |------|
+
+type = "within"
+subject: |--------------|
+query  :    |------|
+
+type = "start"
+query  :    |------|
+subject:    |------------|
+
+type = "end"
+query  :       |------|
+subject: |------------|
+
+type = "equal"
+query  :    |------|
+subject:    |------|
+
+gap / min_overlap controls
+query  : |------|      |------| : subject
+               < gap >
+}\if{html}{\out{</div>}}
+
+The middle distance is the gap. A hit is allowed when this distance is
+\verb{<= max_gap} (for \code{max_gap >= 0}), and overlap width is \verb{>= min_overlap}.
+
+This argument grammar is intentionally aligned with Bioconductor overlap
+APIs (\code{IRanges} / \code{GenomicRanges}).
+}
+
 \examples{
 q <- IRanges::IRanges(start = c(1, 12), end = c(10, 20))
 s <- IRanges::IRanges(start = c(2, 5, 15), end = c(3, 6, 16))

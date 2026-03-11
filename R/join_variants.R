@@ -3,6 +3,7 @@
 #' Convenience wrapper for `fast_overlap_join(..., join = "inner")`.
 #'
 #' @inheritParams fast_overlap_join
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @return A `data.frame` overlap join result.
 #' @export
 #'
@@ -41,6 +42,7 @@ fast_inner_overlap_join <- function(
 #' Convenience wrapper for `fast_overlap_join(..., join = "left")`.
 #'
 #' @inheritParams fast_inner_overlap_join
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @return A `data.frame` overlap join result.
 #' @export
 #'
@@ -79,6 +81,7 @@ fast_left_overlap_join <- function(
 #' Return query rows that overlap at least one subject range.
 #'
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @param query_prefix Prefix applied to query columns.
 #'
 #' @return A `data.frame` containing matching query rows and overlap counts.
@@ -124,6 +127,7 @@ fast_semi_overlap_join <- function(
 #' Return query rows that do not overlap any subject ranges.
 #'
 #' @inheritParams fast_semi_overlap_join
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @return A `data.frame` containing query rows with zero overlaps.
 #' @export
 #'

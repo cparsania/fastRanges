@@ -8,6 +8,7 @@
 #' @param drop_redundant Logical scalar. If `TRUE`, redundant pairs are removed
 #'   for self-comparisons by keeping only `query_id < subject_id`.
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #'
 #' @return A `S4Vectors::Hits` object.
 #' @export
@@ -81,6 +82,7 @@ fast_self_overlaps <- function(
 #' chain of overlaps under the provided overlap settings.
 #'
 #' @inheritParams fast_self_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @param return One of `"vector"` or `"data.frame"`.
 #'
 #' @return If `return = "vector"`, an integer vector of cluster IDs with one
@@ -193,6 +195,7 @@ fast_cluster_overlaps <- function(
 #' @param window_width Integer scalar window width.
 #' @param step_width Integer scalar window step.
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #'
 #' @return A `data.frame` containing window coordinates and overlap counts.
 #' @export

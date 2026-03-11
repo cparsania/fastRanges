@@ -6,6 +6,7 @@
 #' @param subject An `IRanges`/`GRanges` object or a `fast_ranges_index`.
 #' @param chunk_size Integer scalar number of query ranges per chunk.
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #'
 #' @return A `fast_ranges_iter` iterator object.
 #' @export

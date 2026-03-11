@@ -66,6 +66,61 @@ ret_classes <- c(
 ret_classes
 ```
 
+## Argument Semantics (with Interval Diagrams)
+
+`fastRanges` follows the Bioconductor overlap grammar used by
+`IRanges::findOverlaps()` and `GenomicRanges::findOverlaps()`.
+
+### `type`
+
+```text
+type = "any"
+query  :    |------|
+subject: |------|
+=> any overlap is a hit
+
+type = "within"
+subject: |--------------|
+query  :    |------|
+=> query must be fully inside subject
+
+type = "start"
+query  :    |------|
+subject:    |------------|
+=> start positions must match
+
+type = "end"
+query  :       |------|
+subject: |------------|
+=> end positions must match
+
+type = "equal"
+query  :    |------|
+subject:    |------|
+=> start and end must match exactly
+```
+
+### `max_gap` and `min_overlap`
+
+```text
+query  : |------|      |------| : subject
+                < gap >
+```
+
+- `max_gap = -1` means direct overlap is required.
+- `max_gap >= 0` allows near matches separated by up to `max_gap` bases.
+- `min_overlap` sets required overlap width in bases for overlap-based hits.
+
+### Strand handling (`ignore_strand`)
+
+- For `GRanges`, `ignore_strand = FALSE` uses strand-aware matching.
+- For `IRanges`, strand is not present, so this argument has no effect.
+
+### `threads` and `deterministic`
+
+- `threads` controls parallel execution.
+- `deterministic = TRUE` keeps stable hit ordering (`query_id`, `subject_id`).
+
 ## Reusable Subject Index
 
 For repeated queries, build a subject index once and reuse it.

@@ -3,6 +3,7 @@
 #' Count overlaps per query and per subject metadata group.
 #'
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @param group_col Subject metadata column name used for grouping.
 #' @param include_na_group Logical scalar. If `TRUE`, missing group values are
 #'   counted as `"<NA>"`.
@@ -90,6 +91,7 @@ fast_count_overlaps_by_group <- function(
 #' Aggregate a numeric subject metadata column across overlaps for each query.
 #'
 #' @inheritParams fast_find_overlaps
+#' @inheritSection fast_find_overlaps Overlap semantics
 #' @param value_col Subject metadata column name containing numeric values.
 #' @param fun Aggregation function: one of `"count"`, `"sum"`, `"mean"`,
 #'   `"min"`, or `"max"`.
