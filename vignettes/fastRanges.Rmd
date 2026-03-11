@@ -1,0 +1,199 @@
+---
+title: "fastRanges: Scalable Genomic Interval Operations"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{fastRanges: Scalable Genomic Interval Operations}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r vignette-options, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Overview
+
+In Bioconductor, genomic intervals are represented by `GRanges` objects
+(`seqnames`, genomic coordinates, and strand). Core interval overlap operations
+are provided by `findOverlaps()` from `IRanges` and `GenomicRanges`.
+
+`fastRanges` provides deterministic, multithreaded overlap and summary
+operations for `IRanges` and `GRanges`, with APIs designed to stay close to
+Bioconductor semantics while improving throughput.
+
+```{r setup}
+library(fastRanges)
+library(GenomicRanges)
+
+data("fast_ranges_example", package = "fastRanges")
+query <- fast_ranges_example$query
+subject <- fast_ranges_example$subject
+```
+
+## Overlap and Count
+
+```{r overlaps}
+hits <- fast_find_overlaps(query, subject, threads = 2)
+counts <- fast_count_overlaps(query, subject, threads = 2)
+any_hits <- fast_overlaps_any(query, subject, threads = 2)
+
+length(hits)
+counts
+any_hits
+```
+
+## Bioconductor Compatibility
+
+`fastRanges` keeps the main overlap argument grammar aligned with Bioconductor:
+
+- `query`, `subject`, `max_gap`, `min_overlap`, `type`, `ignore_strand`
+
+Additional package-specific controls:
+
+- `threads` for explicit parallelism
+- `deterministic` for reproducible ordering of hit pairs
+
+Typical return classes:
+
+```{r return-types}
+ret_classes <- c(
+  find = class(fast_find_overlaps(query, subject, threads = 1))[1],
+  count = class(fast_count_overlaps(query, subject, threads = 1))[1],
+  any = class(fast_overlaps_any(query, subject, threads = 1))[1],
+  nearest = class(fast_nearest(query, subject))[1]
+)
+
+ret_classes
+```
+
+## Reusable Subject Index
+
+For repeated queries, build a subject index once and reuse it.
+
+```{r index}
+subject_index <- fast_build_index(subject)
+hits_from_index <- fast_find_overlaps(query, subject_index, threads = 2)
+length(hits_from_index)
+```
+
+The indexed and direct queries return equivalent overlap mappings:
+
+```{r index-equivalence}
+direct_hits <- fast_find_overlaps(query, subject, threads = 2)
+
+identical(
+  cbind(S4Vectors::queryHits(hits_from_index), S4Vectors::subjectHits(hits_from_index)),
+  cbind(S4Vectors::queryHits(direct_hits), S4Vectors::subjectHits(direct_hits))
+)
+```
+
+## Overlap Joins
+
+`fast_overlap_join()` returns an overlap pair table with prefixed query and subject metadata columns.
+
+```{r joins}
+joined <- fast_overlap_join(query, subject, join = "inner", threads = 2)
+head(joined)
+```
+
+## Nearest Queries
+
+```{r nearest}
+nearest_tbl <- fast_nearest(query, subject)
+head(as.data.frame(nearest_tbl))
+```
+
+## Extended Overlap Helpers
+
+```{r derived-overlap-helpers}
+self_hits <- fast_self_overlaps(query, threads = 2)
+clusters <- fast_cluster_overlaps(query)
+window_counts <- fast_window_count_overlaps(query, subject, window_width = 1000L, step_width = 500L, threads = 2)
+
+c(self_hits = length(self_hits), clusters = length(unique(clusters)))
+head(window_counts)
+```
+
+## Grouped Counts and Aggregation
+
+```{r grouped-aggregation}
+set.seed(1)
+S4Vectors::mcols(subject)$group <- sample(c("promoter", "enhancer"), length(subject), replace = TRUE)
+S4Vectors::mcols(subject)$score <- seq_len(length(subject))
+
+by_group <- fast_count_overlaps_by_group(query, subject, group_col = "group", threads = 2)
+sum_score <- fast_overlap_aggregate(query, subject, value_col = "score", fun = "sum", threads = 2)
+
+dim(by_group)
+head(sum_score)
+```
+
+## Range Algebra and Coverage
+
+```{r range-coverage}
+query_reduced <- fast_reduce(query)
+query_disjoint <- fast_disjoin(query)
+query_cov <- fast_coverage(query)
+query_tiles <- fast_tile_coverage(query, tile_width = 1000L, step_width = 1000L)
+
+c(reduced = length(query_reduced), disjoint = length(query_disjoint), coverage_seq = length(query_cov))
+head(query_tiles)
+```
+
+## Iterator + Index Lifecycle
+
+```{r iterator-index}
+subject_index <- fast_build_index(subject)
+tmp_index <- tempfile(fileext = ".rds")
+fast_save_index(subject_index, tmp_index)
+loaded_index <- fast_load_index(tmp_index)
+fast_index_stats(loaded_index)
+
+iter <- fast_find_overlaps_iter(query, loaded_index, chunk_size = 100L, threads = 2)
+iter_hits <- fast_iter_collect(iter)
+length(iter_hits)
+unlink(tmp_index)
+```
+
+## Quick Benchmark
+
+```{r benchmark}
+# Small example benchmark for illustration only.
+# For publication-scale runs, use inst/benchmarks/benchmark_bioc.qmd.
+base_time <- system.time({
+  h_base <- GenomicRanges::findOverlaps(query, subject, ignore.strand = FALSE)
+})
+
+subject_index <- fast_build_index(subject)
+fast_time <- system.time({
+  h_fast <- fast_find_overlaps(query, subject_index, ignore_strand = FALSE, threads = 2)
+})
+
+rbind(
+  genomic_ranges = base_time[1:3],
+  fast_ranges = fast_time[1:3]
+)
+
+c(base_hits = length(h_base), fast_hits = length(h_fast))
+```
+
+## External Example Files
+
+The package ships with small BED files under `inst/extdata` and a runnable benchmark script under `inst/benchmarks`:
+
+-   `query_peaks.bed`
+-   `subject_genes.bed`
+-   `benchmark_overlaps.R`
+
+```{r extdata}
+c(
+  list.files(system.file("extdata", package = "fastRanges")),
+  list.files(system.file("benchmarks", package = "fastRanges"))
+)
+```
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```

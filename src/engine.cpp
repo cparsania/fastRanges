@@ -1,0 +1,253 @@
+#include <Rcpp.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <numeric>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+namespace {
+
+inline int to_type_id(const std::string& type) {
+  if (type == "any") return 0;
+  if (type == "start") return 1;
+  if (type == "end") return 2;
+  if (type == "within") return 3;
+  if (type == "equal") return 4;
+  Rcpp::stop("Unsupported `type`: %s", type);
+}
+
+inline bool strand_compatible(const int q_strand, const int s_strand, const bool ignore_strand) {
+  if (ignore_strand) return true;
+  if (q_strand == 0 || s_strand == 0) return true;
+  return q_strand == s_strand;
+}
+
+inline bool interval_match(const int q_start,
+                           const int q_end,
+                           const int s_start,
+                           const int s_end,
+                           const int max_gap,
+                           const int min_overlap,
+                           const int type_id) {
+  const int overlap = std::min(q_end, s_end) - std::max(q_start, s_start) + 1;
+
+  int gap = -1;
+  if (overlap < 1) {
+    if (s_start > q_end) {
+      gap = s_start - q_end - 1;
+    } else {
+      gap = q_start - s_end - 1;
+    }
+  }
+
+  if (max_gap < 0) {
+    if (overlap < 1) return false;
+  } else {
+    if (gap > max_gap) return false;
+  }
+
+  const int required_overlap = std::max(min_overlap, max_gap < 0 ? 1 : 0);
+  if (overlap < required_overlap) return false;
+
+  switch (type_id) {
+  case 0:
+    return true;
+  case 1:
+    if (max_gap < 0) return q_start == s_start;
+    return std::abs(q_start - s_start) <= max_gap;
+  case 2:
+    if (max_gap < 0) return q_end == s_end;
+    return std::abs(q_end - s_end) <= max_gap;
+  case 3:
+    return q_start >= s_start && q_end <= s_end;
+  case 4:
+    return q_start == s_start && q_end == s_end;
+  default:
+    return false;
+  }
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List cpp_find_overlaps_indexed(
+    const Rcpp::IntegerVector& q_start,
+    const Rcpp::IntegerVector& q_end,
+    const Rcpp::IntegerVector& q_seq,
+    const Rcpp::IntegerVector& q_strand,
+    const Rcpp::IntegerVector& s_start,
+    const Rcpp::IntegerVector& s_end,
+    const Rcpp::IntegerVector& s_seq,
+    const Rcpp::IntegerVector& s_strand,
+    const Rcpp::IntegerVector& s_original,
+    const Rcpp::IntegerVector& partition_keys,
+    const Rcpp::IntegerVector& partition_starts,
+    const Rcpp::IntegerVector& partition_ends,
+    const int max_gap,
+    const int min_overlap,
+    const std::string type,
+    const bool ignore_strand,
+    const int threads,
+    const bool deterministic) {
+
+  const int nq = q_start.size();
+  const int ns = s_start.size();
+
+  if (q_end.size() != nq || q_seq.size() != nq || q_strand.size() != nq) {
+    Rcpp::stop("Query vectors must have equal length");
+  }
+  if (s_end.size() != ns || s_seq.size() != ns || s_strand.size() != ns || s_original.size() != ns) {
+    Rcpp::stop("Subject vectors must have equal length");
+  }
+  if (partition_starts.size() != partition_ends.size() || partition_keys.size() != partition_starts.size()) {
+    Rcpp::stop("Partition vectors must have equal length");
+  }
+  if (max_gap < -1) {
+    Rcpp::stop("`max_gap` must be >= -1");
+  }
+  if (min_overlap < 0) {
+    Rcpp::stop("`min_overlap` must be >= 0");
+  }
+
+  const int type_id = to_type_id(type);
+  const int scan_gap = (max_gap < 0) ? 0 : max_gap;
+
+  std::unordered_map<int, int> partition_by_key;
+  partition_by_key.reserve(static_cast<std::size_t>(partition_keys.size() * 2));
+  for (int i = 0; i < partition_keys.size(); ++i) {
+    partition_by_key[partition_keys[i]] = i;
+  }
+
+  std::vector< std::vector<int> > query_partitions(static_cast<std::size_t>(partition_keys.size()));
+  for (int qi = 0; qi < nq; ++qi) {
+    const int seq_id = q_seq[qi];
+    if (seq_id == 0) continue;
+    const auto it = partition_by_key.find(seq_id);
+    if (it == partition_by_key.end()) continue;
+    query_partitions[static_cast<std::size_t>(it->second)].push_back(qi);
+  }
+
+  const std::size_t n_partitions = static_cast<std::size_t>(partition_keys.size());
+  std::vector< std::vector<int> > out_query(n_partitions);
+  std::vector< std::vector<int> > out_subject(n_partitions);
+
+  auto process_partition = [&](const int part) {
+    const int s_begin = partition_starts[part] - 1;
+    const int s_end_idx = partition_ends[part] - 1;
+
+    if (s_begin < 0 || s_end_idx < s_begin) {
+      return;
+    }
+
+    std::vector<int>& q_hits = out_query[static_cast<std::size_t>(part)];
+    std::vector<int>& s_hits = out_subject[static_cast<std::size_t>(part)];
+
+    std::vector<int> q_idx = query_partitions[static_cast<std::size_t>(part)];
+    if (q_idx.empty()) {
+      return;
+    }
+
+    std::sort(q_idx.begin(), q_idx.end(), [&](const int lhs, const int rhs) {
+      if (q_start[lhs] != q_start[rhs]) return q_start[lhs] < q_start[rhs];
+      if (q_end[lhs] != q_end[rhs]) return q_end[lhs] < q_end[rhs];
+      return lhs < rhs;
+    });
+
+    int left = s_begin;
+    for (const int qi : q_idx) {
+      const int ql = q_start[qi];
+      const int qr = q_end[qi];
+
+      while (left <= s_end_idx && static_cast<long long>(s_end[left]) < (static_cast<long long>(ql) - scan_gap)) {
+        ++left;
+      }
+
+      for (int sj = left; sj <= s_end_idx; ++sj) {
+        if (static_cast<long long>(s_start[sj]) > (static_cast<long long>(qr) + scan_gap)) {
+          break;
+        }
+
+        if (!strand_compatible(q_strand[qi], s_strand[sj], ignore_strand)) {
+          continue;
+        }
+
+        if (!interval_match(ql, qr, s_start[sj], s_end[sj], max_gap, min_overlap, type_id)) {
+          continue;
+        }
+
+        q_hits.push_back(qi + 1);
+        s_hits.push_back(s_original[sj]);
+      }
+    }
+  };
+
+  if (threads > 1 && n_partitions > 1) {
+    const int n_workers = std::min<int>(threads, static_cast<int>(n_partitions));
+    std::atomic<int> next_partition(0);
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<std::size_t>(n_workers));
+
+    for (int worker = 0; worker < n_workers; ++worker) {
+      workers.emplace_back([&]() {
+        while (true) {
+          const int part = next_partition.fetch_add(1);
+          if (part >= static_cast<int>(n_partitions)) break;
+          process_partition(part);
+        }
+      });
+    }
+
+    for (auto& worker : workers) {
+      worker.join();
+    }
+  } else {
+    for (int part = 0; part < static_cast<int>(n_partitions); ++part) {
+      process_partition(part);
+    }
+  }
+
+  std::size_t total_hits = 0;
+  for (const auto& part_hits : out_query) {
+    total_hits += part_hits.size();
+  }
+
+  std::vector<int> query_hits;
+  std::vector<int> subject_hits;
+  query_hits.reserve(total_hits);
+  subject_hits.reserve(total_hits);
+
+  for (std::size_t part = 0; part < n_partitions; ++part) {
+    query_hits.insert(query_hits.end(), out_query[part].begin(), out_query[part].end());
+    subject_hits.insert(subject_hits.end(), out_subject[part].begin(), out_subject[part].end());
+  }
+
+  if (deterministic && query_hits.size() > 1) {
+    std::vector<std::size_t> ord(query_hits.size());
+    std::iota(ord.begin(), ord.end(), 0);
+
+    std::sort(ord.begin(), ord.end(), [&](const std::size_t lhs, const std::size_t rhs) {
+      if (query_hits[lhs] != query_hits[rhs]) return query_hits[lhs] < query_hits[rhs];
+      if (subject_hits[lhs] != subject_hits[rhs]) return subject_hits[lhs] < subject_hits[rhs];
+      return lhs < rhs;
+    });
+
+    std::vector<int> sorted_query(query_hits.size());
+    std::vector<int> sorted_subject(subject_hits.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) {
+      sorted_query[i] = query_hits[ord[i]];
+      sorted_subject[i] = subject_hits[ord[i]];
+    }
+
+    query_hits.swap(sorted_query);
+    subject_hits.swap(sorted_subject);
+  }
+
+  return Rcpp::List::create(
+    Rcpp::Named("query_hits") = query_hits,
+    Rcpp::Named("subject_hits") = subject_hits
+  );
+}

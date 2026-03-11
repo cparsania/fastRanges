@@ -1,0 +1,17 @@
+^\.DS_Store$
+^\.git$
+^\.github$
+^\.gitignore$
+^README\.Rmd$
+^_pkgdown\.yml$
+^pkgdown$
+^docs$
+^data-raw$
+^fastRanges\.Rcheck$
+^\.\.Rcheck$
+^.*\.tar\.gz$
+^vignettes/.*\.html$
+^vignettes/.*\.rmarkdown$
+^vignettes/.*_files$
+^inst/benchmarks/figures$
+^src/symbols\.rds$

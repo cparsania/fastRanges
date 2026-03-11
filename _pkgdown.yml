@@ -1,0 +1,27 @@
+url: https://cparsania.github.io/fastRanges
+template:
+  bootstrap: 5
+home:
+  links:
+  - text: GitHub
+    href: https://github.com/cparsania/fastRanges
+reference:
+- title: "Core overlap API"
+  contents:
+  - fast_find_overlaps
+  - fast_count_overlaps
+  - fast_overlaps_any
+  - fast_overlap_join
+  - fast_build_index
+  - fast_nearest
+- title: "Utilities"
+  contents:
+  - fast_default_threads
+- title: "Data"
+  contents:
+  - fast_ranges_example
+articles:
+- title: "Get Started"
+  navbar: "~"
+  contents:
+  - fastRanges
