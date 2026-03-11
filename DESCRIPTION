@@ -27,6 +27,7 @@ Suggests:
     knitr,
     rmarkdown,
     pkgdown,
+    XVector,
     ggplot2,
     dplyr,
     tidyr,
