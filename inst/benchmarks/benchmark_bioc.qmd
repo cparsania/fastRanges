@@ -18,7 +18,7 @@ params:
   seed: 42
   iterations: 4
   max_threads: 96
-  thread_grid: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 80, 96]
+  thread_grid: [2, 8, 32, 64, 96]
   gr_subject_sizes: [2000000, 5000000, 8000000]
   gr_query_ratio: 0.20
   repeated_queries: 8
@@ -155,6 +155,16 @@ cat("Using benchmark max_threads =", max_threads, "\n")
 cat("Thread grid =", paste(thread_grid, collapse = ", "), "\n")
 ```
 
+## Choosing the Right fastRanges Mode
+
+Use this decision rule before benchmarking or production runs:
+
+1. Single overlap call: use direct subject (`fast_find_overlaps(query, subject, ...)`).
+2. Repeated queries on one subject: build once with `fast_build_index(subject)` and pass the index.
+3. If output order stability matters across thread counts, keep `deterministic = TRUE`.
+4. For throughput-only timing, use `deterministic = FALSE` to remove sorting overhead.
+5. Tune `threads` empirically; saturation often occurs before maximum core count.
+
 ## 96-Core Server Profile and Rationale
 
 This benchmark profile is tuned for high-core Linux servers and targets up to `96` threads.
@@ -164,7 +174,7 @@ Why these defaults are large:
 -   `GRanges` scenarios from `2M` to `8M` subjects expose index build cost and query throughput under high concurrency.
 -   repeated-query workload (`8` query batches against one `8M` subject) captures the practical value of index reuse.
 -   `IRanges` scaling (`12M` subjects, `3M` queries) pushes thread scaling where object overhead is lower and compute dominates.
--   thread grid reaches `96` while still sampling low-thread and mid-thread regions needed to identify scaling saturation.
+-   thread grid for a 96-core server is `{2, 8, 32, 64, 96}`; the script automatically adds `1` for baseline speedup normalization.
 
 On a 96-core server, run:
 
@@ -272,11 +282,12 @@ p_gr_speedup
 ggsave(file.path(fig_dir, "granges_speedup_line.png"), p_gr_speedup, width = 10, height = 5, dpi = 300)
 ```
 
-## Thread Scaling: IRanges vs fastRanges
+## Thread Scaling: IRanges vs fastRanges (Fair Indexed Comparison)
 
 ```{r iranges-scaling}
 subject_ir <- simulate_iranges(as.integer(params$ir_subject_n), seed = params$seed + 1000L)
 query_ir <- simulate_iranges(as.integer(params$ir_query_n), seed = params$seed + 1001L)
+subject_ir_index <- fastRanges::fast_build_index(subject_ir)
 
 iranges_supports_nthread <- "nthread" %in% names(formals(IRanges::findOverlaps))
 iranges_engine_label <- if (iranges_supports_nthread) "IRanges_nthread" else "IRanges_serial"
@@ -295,7 +306,16 @@ for (i in seq_along(thread_grid)) {
   }
 
   local <- dplyr::bind_rows(
-    time_engine("fastRanges_IRanges", function() fastRanges::fast_find_overlaps(query_ir, subject_ir, threads = th), params$iterations),
+    time_engine(
+      "fastRanges_indexed_IRanges",
+      function() fastRanges::fast_find_overlaps(
+        query_ir,
+        subject_ir_index,
+        threads = th,
+        deterministic = FALSE
+      ),
+      params$iterations
+    ),
     time_engine(iranges_engine_label, iranges_runner, params$iterations)
   )
 
@@ -319,13 +339,15 @@ ir_scaling_summary <- ir_scaling %>%
 ir_scaling_summary
 ```
 
+This scaling panel uses pre-indexed `fastRanges` (`fast_build_index(subject_ir)` once, then reused) to avoid counting index construction time in every iteration. This makes the comparison closer to repeated-query production workloads.
+
 ```{r iranges-scaling-plot, fig.width=10, fig.height=5}
 p_ir_scaling <- ggplot(ir_scaling_summary, aes(x = threads, y = speedup_vs_1_thread, color = engine)) +
   geom_line(linewidth = 1) +
   geom_point(size = 3) +
   scale_x_continuous(breaks = thread_grid) +
   labs(
-    title = "Thread scaling on IRanges workloads",
+    title = "Thread scaling on IRanges workloads (indexed fastRanges)",
     x = "Threads",
     y = "Speedup vs 1 thread",
     color = "Engine"
@@ -700,7 +722,7 @@ repeat_gr_speedup <- repeat_bench_summary$speedup_vs_genomicranges[repeat_bench_
 repeat_direct_gain <- repeat_direct_sec / repeat_index_sec
 
 ir_fast <- ir_scaling_summary %>%
-  dplyr::filter(engine == "fastRanges_IRanges")
+  dplyr::filter(engine == "fastRanges_indexed_IRanges")
 ir_fast_best <- ir_fast[which.max(ir_fast$speedup_vs_1_thread), , drop = FALSE]
 
 drv_fast <- drv_summary %>%
@@ -718,7 +740,7 @@ cat(sprintf(
   repeat_gr_speedup
 ))
 cat(sprintf(
-  "- `fastRanges` IRanges scaling peaked at **%.2fx** speedup versus 1 thread at **%d threads**.\n",
+  "- Pre-indexed `fastRanges` on IRanges workloads peaked at **%.2fx** speedup versus 1 thread at **%d threads**.\n",
   ir_fast_best$speedup_vs_1_thread,
   ir_fast_best$threads
 ))

@@ -12,12 +12,11 @@
 /src/symbols.rds
 /man/*.html
 /docs/
-/inst/benchmarks/figures/
 /vignettes/*.html
 /vignettes/*.rmarkdown
 /vignettes/*_files/
 
 /.quarto/
 **/*.quarto_ipynb
-inst/benchmarks/benchmark_overlaps.R
+inst/benchmarks/*
 vignettes/benchmark_bioc.qmd

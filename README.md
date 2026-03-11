@@ -194,6 +194,7 @@ sum_score <- fast_overlap_aggregate(query, subject, value_col = "score", fun = "
 
 For publication-scale benchmarking, see:
 
+- [Benchmark Guide](inst/benchmarks/README.md)
 - [benchmark_bioc.qmd](inst/benchmarks/benchmark_bioc.qmd)
 
 Render with:

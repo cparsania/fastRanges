@@ -13,8 +13,9 @@
 #' @param ignore_strand Logical scalar. For `GRanges`, if `FALSE`, comparisons
 #'   follow strand-aware Bioconductor semantics. Ignored for non-genomic
 #'   ranges.
-#' @param threads Integer scalar thread count. Use larger values on multicore
-#'   machines for throughput-oriented workloads.
+#' @param threads Integer scalar thread count. For repeated-query workloads,
+#'   prefer `fast_build_index(subject)` and tune `threads` empirically for your
+#'   hardware (scaling can plateau at high core counts).
 #' @param deterministic Logical scalar. If `TRUE`, output is sorted by
 #'   `(query_id, subject_id)`, giving stable ordering across thread counts.
-#'   If `FALSE`, output order is unspecified.
+#'   If `FALSE`, output order is unspecified and throughput is typically higher.

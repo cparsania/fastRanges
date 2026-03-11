@@ -132,23 +132,31 @@ Rcpp::List cpp_find_overlaps_indexed(
   }
 
   const std::size_t n_partitions = static_cast<std::size_t>(partition_keys.size());
-  std::vector< std::vector<int> > out_query(n_partitions);
-  std::vector< std::vector<int> > out_subject(n_partitions);
+  if (n_partitions == 0) {
+    return Rcpp::List::create(
+      Rcpp::Named("query_hits") = std::vector<int>(),
+      Rcpp::Named("subject_hits") = std::vector<int>()
+    );
+  }
 
-  auto process_partition = [&](const int part) {
-    const int s_begin = partition_starts[part] - 1;
-    const int s_end_idx = partition_ends[part] - 1;
+  struct Task {
+    int part;
+    int q_begin;
+    int q_end;
+  };
 
-    if (s_begin < 0 || s_end_idx < s_begin) {
-      return;
-    }
+  const int thread_count = std::max(1, threads);
+  const int min_chunk_size = 8192;
+  const int target_chunks_per_thread = 4;
 
-    std::vector<int>& q_hits = out_query[static_cast<std::size_t>(part)];
-    std::vector<int>& s_hits = out_subject[static_cast<std::size_t>(part)];
+  std::vector< std::vector<int> > query_left_starts(n_partitions);
+  std::vector<Task> tasks;
+  tasks.reserve(n_partitions * 4);
 
-    std::vector<int> q_idx = query_partitions[static_cast<std::size_t>(part)];
+  for (int part = 0; part < static_cast<int>(n_partitions); ++part) {
+    std::vector<int>& q_idx = query_partitions[static_cast<std::size_t>(part)];
     if (q_idx.empty()) {
-      return;
+      continue;
     }
 
     std::sort(q_idx.begin(), q_idx.end(), [&](const int lhs, const int rhs) {
@@ -157,13 +165,69 @@ Rcpp::List cpp_find_overlaps_indexed(
       return lhs < rhs;
     });
 
-    int left = s_begin;
-    for (const int qi : q_idx) {
+    const int s_begin = partition_starts[part] - 1;
+    const int s_end_idx = partition_ends[part] - 1;
+    std::vector<int>& left_starts = query_left_starts[static_cast<std::size_t>(part)];
+    left_starts.resize(q_idx.size());
+
+    if (s_begin < 0 || s_end_idx < s_begin) {
+      std::fill(left_starts.begin(), left_starts.end(), s_end_idx + 1);
+    } else {
+      int left = s_begin;
+      for (std::size_t q_pos = 0; q_pos < q_idx.size(); ++q_pos) {
+        const int qi = q_idx[q_pos];
+        const int ql = q_start[qi];
+        while (left <= s_end_idx && static_cast<long long>(s_end[left]) < (static_cast<long long>(ql) - scan_gap)) {
+          ++left;
+        }
+        left_starts[q_pos] = left;
+      }
+    }
+
+    const int n_q = static_cast<int>(q_idx.size());
+    const int desired_chunks = std::max(1, std::min(n_q, thread_count * target_chunks_per_thread));
+    const int chunk_size = std::max(min_chunk_size, (n_q + desired_chunks - 1) / desired_chunks);
+    for (int from = 0; from < n_q; from += chunk_size) {
+      tasks.push_back(Task{
+        part,
+        from,
+        std::min(n_q, from + chunk_size)
+      });
+    }
+  }
+
+  if (tasks.empty()) {
+    return Rcpp::List::create(
+      Rcpp::Named("query_hits") = std::vector<int>(),
+      Rcpp::Named("subject_hits") = std::vector<int>()
+    );
+  }
+
+  std::vector< std::vector<int> > out_query(tasks.size());
+  std::vector< std::vector<int> > out_subject(tasks.size());
+
+  auto process_task = [&](const std::size_t task_id) {
+    const Task& task = tasks[task_id];
+    const int part = task.part;
+    const int s_begin = partition_starts[part] - 1;
+    const int s_end_idx = partition_ends[part] - 1;
+
+    if (s_begin < 0 || s_end_idx < s_begin) {
+      return;
+    }
+
+    const std::vector<int>& q_idx = query_partitions[static_cast<std::size_t>(part)];
+    const std::vector<int>& left_starts = query_left_starts[static_cast<std::size_t>(part)];
+    std::vector<int>& q_hits = out_query[task_id];
+    std::vector<int>& s_hits = out_subject[task_id];
+
+    for (int q_pos = task.q_begin; q_pos < task.q_end; ++q_pos) {
+      const int qi = q_idx[static_cast<std::size_t>(q_pos)];
       const int ql = q_start[qi];
       const int qr = q_end[qi];
-
-      while (left <= s_end_idx && static_cast<long long>(s_end[left]) < (static_cast<long long>(ql) - scan_gap)) {
-        ++left;
+      const int left = left_starts[static_cast<std::size_t>(q_pos)];
+      if (left > s_end_idx) {
+        continue;
       }
 
       for (int sj = left; sj <= s_end_idx; ++sj) {
@@ -185,18 +249,20 @@ Rcpp::List cpp_find_overlaps_indexed(
     }
   };
 
-  if (threads > 1 && n_partitions > 1) {
-    const int n_workers = std::min<int>(threads, static_cast<int>(n_partitions));
-    std::atomic<int> next_partition(0);
+  if (thread_count > 1 && tasks.size() > 1) {
+    const int n_workers = std::min<int>(thread_count, static_cast<int>(tasks.size()));
+    std::atomic<int> next_task(0);
     std::vector<std::thread> workers;
     workers.reserve(static_cast<std::size_t>(n_workers));
 
     for (int worker = 0; worker < n_workers; ++worker) {
       workers.emplace_back([&]() {
         while (true) {
-          const int part = next_partition.fetch_add(1);
-          if (part >= static_cast<int>(n_partitions)) break;
-          process_partition(part);
+          const int task_id = next_task.fetch_add(1);
+          if (task_id >= static_cast<int>(tasks.size())) {
+            break;
+          }
+          process_task(static_cast<std::size_t>(task_id));
         }
       });
     }
@@ -205,14 +271,14 @@ Rcpp::List cpp_find_overlaps_indexed(
       worker.join();
     }
   } else {
-    for (int part = 0; part < static_cast<int>(n_partitions); ++part) {
-      process_partition(part);
+    for (std::size_t task_id = 0; task_id < tasks.size(); ++task_id) {
+      process_task(task_id);
     }
   }
 
   std::size_t total_hits = 0;
-  for (const auto& part_hits : out_query) {
-    total_hits += part_hits.size();
+  for (const auto& task_hits : out_query) {
+    total_hits += task_hits.size();
   }
 
   std::vector<int> query_hits;
@@ -220,9 +286,9 @@ Rcpp::List cpp_find_overlaps_indexed(
   query_hits.reserve(total_hits);
   subject_hits.reserve(total_hits);
 
-  for (std::size_t part = 0; part < n_partitions; ++part) {
-    query_hits.insert(query_hits.end(), out_query[part].begin(), out_query[part].end());
-    subject_hits.insert(subject_hits.end(), out_subject[part].begin(), out_subject[part].end());
+  for (std::size_t task_id = 0; task_id < tasks.size(); ++task_id) {
+    query_hits.insert(query_hits.end(), out_query[task_id].begin(), out_query[task_id].end());
+    subject_hits.insert(subject_hits.end(), out_subject[task_id].begin(), out_subject[task_id].end());
   }
 
   if (deterministic && query_hits.size() > 1) {

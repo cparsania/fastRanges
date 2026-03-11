@@ -63,6 +63,24 @@ test_that("IRanges support matches IRanges::findOverlaps", {
   expect_equal(canon_hits(got), canon_hits(ref))
 })
 
+test_that("indexed IRanges hits are thread-invariant when deterministic is FALSE", {
+  set.seed(7)
+  q <- IRanges::IRanges(
+    start = sample.int(20000L, 600L, replace = TRUE),
+    width = sample.int(150L, 600L, replace = TRUE)
+  )
+  s <- IRanges::IRanges(
+    start = sample.int(20000L, 2000L, replace = TRUE),
+    width = sample.int(150L, 2000L, replace = TRUE)
+  )
+  idx <- fast_build_index(s)
+
+  h1 <- fast_find_overlaps(q, idx, threads = 1, deterministic = FALSE)
+  h8 <- fast_find_overlaps(q, idx, threads = 8, deterministic = FALSE)
+
+  expect_equal(canon_hits(h1), canon_hits(h8))
+})
+
 test_that("count and any wrappers agree with overlap hits", {
   data(fast_ranges_example, package = "fastRanges")
   q <- fast_ranges_example$query

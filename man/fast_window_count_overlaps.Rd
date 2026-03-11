@@ -47,12 +47,13 @@ for a hit. Larger values are stricter.}
 follow strand-aware Bioconductor semantics. Ignored for non-genomic
 ranges.}
 
-\item{threads}{Integer scalar thread count. Use larger values on multicore
-machines for throughput-oriented workloads.}
+\item{threads}{Integer scalar thread count. For repeated-query workloads,
+prefer \code{fast_build_index(subject)} and tune \code{threads} empirically for your
+hardware (scaling can plateau at high core counts).}
 
 \item{deterministic}{Logical scalar. If \code{TRUE}, output is sorted by
 \verb{(query_id, subject_id)}, giving stable ordering across thread counts.
-If \code{FALSE}, output order is unspecified.}
+If \code{FALSE}, output order is unspecified and throughput is typically higher.}
 }
 \value{
 A \code{data.frame} containing window coordinates and overlap counts.
