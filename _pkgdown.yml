@@ -11,9 +11,47 @@ reference:
   - fast_find_overlaps
   - fast_count_overlaps
   - fast_overlaps_any
+  - fast_self_overlaps
+  - fast_cluster_overlaps
+  - fast_window_count_overlaps
+- title: "Join API"
+  contents:
   - fast_overlap_join
+  - fast_inner_overlap_join
+  - fast_left_overlap_join
+  - fast_semi_overlap_join
+  - fast_anti_overlap_join
+- title: "Index and Iteration"
+  contents:
   - fast_build_index
+  - fast_save_index
+  - fast_load_index
+  - fast_index_stats
+  - fast_find_overlaps_iter
+  - fast_iter_has_next
+  - fast_iter_next
+  - fast_iter_reset
+  - fast_iter_collect
+- title: "Nearest and Directional"
+  contents:
   - fast_nearest
+  - fast_distance_to_nearest
+  - fast_precede
+  - fast_follow
+- title: "Aggregation and Coverage"
+  contents:
+  - fast_count_overlaps_by_group
+  - fast_overlap_aggregate
+  - fast_coverage
+  - fast_tile_coverage
+- title: "Range Algebra"
+  contents:
+  - fast_reduce
+  - fast_disjoin
+  - fast_gaps
+  - fast_range_union
+  - fast_range_intersect
+  - fast_range_setdiff
 - title: "Utilities"
   contents:
   - fast_default_threads
