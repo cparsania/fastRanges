@@ -289,43 +289,73 @@ subject_ir <- simulate_iranges(as.integer(params$ir_subject_n), seed = params$se
 query_ir <- simulate_iranges(as.integer(params$ir_query_n), seed = params$seed + 1001L)
 subject_ir_index <- fastRanges::fast_build_index(subject_ir)
 
-iranges_supports_nthread <- "nthread" %in% names(formals(IRanges::findOverlaps))
-iranges_engine_label <- if (iranges_supports_nthread) "IRanges_nthread" else "IRanges_serial"
+iranges_nthread_probe <- try(
+  {
+    probe_q <- IRanges::IRanges(start = c(1L, 10L), width = c(3L, 4L))
+    probe_s <- IRanges::IRanges(start = c(2L, 9L), width = c(3L, 4L))
+    IRanges::findOverlaps(probe_q, probe_s, nthread = 1L)
+    TRUE
+  },
+  silent = TRUE
+)
+iranges_supports_nthread <- isTRUE(iranges_nthread_probe)
 
 if (!iranges_supports_nthread) {
-  message("Installed IRanges::findOverlaps() has no `nthread` argument; using serial IRanges baseline.")
+  message(
+    "Installed IRanges::findOverlaps() does not accept `nthread` for this method; ",
+    "using serial IRanges baseline."
+  )
+} else {
+  message("IRanges nthread support detected; running threaded IRanges benchmark.")
 }
 
-ir_scale_list <- vector("list", length(thread_grid))
+ref_hits_ir <- length(IRanges::findOverlaps(query_ir, subject_ir))
+
+ir_scale_list <- list()
 for (i in seq_along(thread_grid)) {
   th <- thread_grid[i]
-  iranges_runner <- if (iranges_supports_nthread) {
-    function() IRanges::findOverlaps(query_ir, subject_ir, nthread = th)
-  } else {
-    function() IRanges::findOverlaps(query_ir, subject_ir)
-  }
 
-  local <- dplyr::bind_rows(
-    time_engine(
-      "fastRanges_indexed_IRanges",
-      function() fastRanges::fast_find_overlaps(
-        query_ir,
-        subject_ir_index,
-        threads = th,
-        deterministic = FALSE
-      ),
-      params$iterations
+  fast_local <- time_engine(
+    "fastRanges_indexed_IRanges",
+    function() fastRanges::fast_find_overlaps(
+      query_ir,
+      subject_ir_index,
+      threads = th,
+      deterministic = FALSE
     ),
-    time_engine(iranges_engine_label, iranges_runner, params$iterations)
+    params$iterations
   )
-
-  ref_hits <- unique(local$hits[local$engine == iranges_engine_label])
-  if (length(ref_hits) != 1L || any(local$hits != ref_hits[1])) {
-    stop("Hit count mismatch in IRanges scaling benchmark")
+  if (any(fast_local$hits != ref_hits_ir)) {
+    stop("Hit count mismatch for fastRanges in IRanges scaling benchmark")
   }
+  fast_local$threads <- th
+  ir_scale_list[[length(ir_scale_list) + 1L]] <- fast_local
 
-  local$threads <- th
-  ir_scale_list[[i]] <- local
+  if (iranges_supports_nthread) {
+    ir_local <- time_engine(
+      "IRanges_nthread",
+      function() IRanges::findOverlaps(query_ir, subject_ir, nthread = th),
+      params$iterations
+    )
+    if (any(ir_local$hits != ref_hits_ir)) {
+      stop("Hit count mismatch for IRanges in IRanges scaling benchmark")
+    }
+    ir_local$threads <- th
+    ir_scale_list[[length(ir_scale_list) + 1L]] <- ir_local
+  }
+}
+
+if (!iranges_supports_nthread) {
+  ir_serial <- time_engine(
+    "IRanges_serial",
+    function() IRanges::findOverlaps(query_ir, subject_ir),
+    params$iterations
+  )
+  if (any(ir_serial$hits != ref_hits_ir)) {
+    stop("Hit count mismatch for serial IRanges baseline")
+  }
+  ir_serial$threads <- 1L
+  ir_scale_list[[length(ir_scale_list) + 1L]] <- ir_serial
 }
 
 ir_scaling <- dplyr::bind_rows(ir_scale_list)
@@ -336,10 +366,10 @@ ir_scaling_summary <- ir_scaling %>%
   dplyr::mutate(speedup_vs_1_thread = first(median_sec) / median_sec) %>%
   dplyr::ungroup()
 
-ir_scaling_summary
+ir_scaling_summary %>% dplyr::arrange(engine, threads)
 ```
 
-This scaling panel uses pre-indexed `fastRanges` (`fast_build_index(subject_ir)` once, then reused) to avoid counting index construction time in every iteration. This makes the comparison closer to repeated-query production workloads.
+This scaling panel uses pre-indexed `fastRanges` (`fast_build_index(subject_ir)` once, then reused) to avoid counting index construction time in every iteration. This makes the comparison closer to repeated-query production workloads. When `IRanges` does not support `nthread`, the report shows a single `IRanges_serial` point at `threads = 1`.
 
 ```{r iranges-scaling-plot, fig.width=10, fig.height=5}
 p_ir_scaling <- ggplot(ir_scaling_summary, aes(x = threads, y = speedup_vs_1_thread, color = engine)) +
