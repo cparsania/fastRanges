@@ -40,8 +40,17 @@ jobs:
         run: |
           Rscript -e 'options(repos = BiocManager::repositories()); BiocManager::install("XVector", ask = FALSE, update = FALSE); pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)'
 
+      - name: Verify pkgdown output
+        run: |
+          test -f docs/index.html
+          echo "pkgdown index found at docs/index.html"
+          ls -la docs | sed -n '1,120p'
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs
+          publish_branch: gh-pages
+          force_orphan: true
+          enable_jekyll: false
