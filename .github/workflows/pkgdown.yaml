@@ -33,8 +33,17 @@ jobs:
           extra-packages: |
             any::BiocManager
             any::pkgdown
+            any::roxygen2
             bioc::XVector
             local::.
+
+      - name: Regenerate Rd documentation
+        run: |
+          Rscript -e 'roxygen2::roxygenise(".")'
+
+      - name: Verify overlap argument docs stay in sync
+        run: |
+          Rscript tools/check_overlap_doc_inheritance.R
 
       - name: Build site
         run: |
@@ -43,8 +52,13 @@ jobs:
       - name: Verify pkgdown output
         run: |
           test -f docs/index.html
+          test -f docs/reference/index.html
+          test -f docs/reference/fast_anti_overlap_join.html
+          grep -q "fast_anti_overlap_join" docs/reference/index.html
+          grep -q "Overlap semantics" docs/reference/fast_anti_overlap_join.html
           echo "pkgdown index found at docs/index.html"
           ls -la docs | sed -n '1,120p'
+          ls -la docs/reference | sed -n '1,120p'
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v3
