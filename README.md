@@ -5,103 +5,18 @@
 [![pkgdown site](https://img.shields.io/badge/pkgdown-site-blue)](https://cparsania.github.io/fastRanges/)
 [![Bioconductor](https://img.shields.io/badge/Bioconductor-coming_soon-lightgrey)](https://bioconductor.org/)
 
-`fastRanges` is a high-performance, Bioconductor-style package for deterministic multithreaded interval operations on `IRanges` and `GRanges`.
+`fastRanges` is a multithreaded interval engine for `IRanges` and `GRanges`.
+It keeps Bioconductor-style overlap semantics and familiar argument grammar
+while targeting the workloads that usually dominate runtime in genomics:
+large `findOverlaps()` jobs, repeated query batches against one subject, and
+overlap-derived summaries such as counts, joins, and aggregation.
 
 Website: <https://cparsania.github.io/fastRanges/>  
 Source: <https://github.com/cparsania/fastRanges>
 
-## Background 
-
-In Bioconductor, genomic intervals are represented by `GRanges` (from
-`GenomicRanges`), which encode chromosome (`seqnames`), coordinates (`ranges`),
-and strand. These objects are central to analyses such as:
-
-- ChIP-seq and ATAC-seq peak-to-gene annotation,
-- overlap of variants with exons, promoters, or regulatory elements,
-- transcriptome and epigenome region-level summarization.
-
-Core overlap computations are performed with `findOverlaps()`, a Bioconductor
-API provided through `IRanges` and extended for genomic coordinates in
-`GenomicRanges`.
-
-## Problem 
-
-At modern dataset scale, interval overlap is frequently the dominant runtime
-cost. This is especially pronounced when analyses require:
-
-- very large overlap queries (millions of intervals),
-- repeated query batches against the same subject set,
-- downstream counting and aggregation that revisit overlap results.
-
-These patterns are common in both exploratory analyses and production
-bioinformatics pipelines.
-
-## Limitations of Current Approaches at Scale
-
-Bioconductor tools are mature and statistically reliable, but practical
-bottlenecks can emerge for high-throughput overlap workloads:
-
-- repeated `findOverlaps()` calls may re-incur non-trivial indexing/traversal
-  costs when subjects are reused,
-- multithreading behavior is not uniform across all overlap-related operations,
-- overlap detection, grouping, and aggregation are often executed as separate
-  stages, increasing end-to-end runtime.
-
-## fastRanges Approach
-
-`fastRanges` addresses these constraints while remaining Bioconductor-oriented:
-
-- deterministic multithreaded overlap search,
-- reusable subject indexing for repeated-query workflows,
-- derived overlap summaries (counts, grouped counts, aggregation) in the same
-  package,
-- direct support for `IRanges`/`GRanges` classes and Bioconductor-style outputs.
-
-## Bioconductor Compatibility
-
-### Does fastRanges achieve the same things as current tools?
-
-For core overlap tasks, yes. `fastRanges` is built to produce equivalent
-overlap relationships to Bioconductor baselines for supported modes, while
-adding reusable indexing and multithreaded execution.
-
-Current scope differences:
-
-- focus is on deterministic overlap computation and high-throughput workflows,
-- not every optional argument from every Bioconductor overlap helper is exposed
-  in every `fastRanges` wrapper.
-
-### Argument conventions
-
-`fastRanges` keeps argument names aligned with Bioconductor intent:
-
-- `query`, `subject`, `max_gap`, `min_overlap`, `type`, `ignore_strand`
-- join/nearest/range operations follow familiar Bioconductor semantics
-
-Package-specific additions are explicit:
-
-- `threads` for parallel execution
-- `deterministic` for reproducible output ordering
-
-### Return types
-
-- `fast_find_overlaps()`, `fast_self_overlaps()`, iterator collectors:
-  `S4Vectors::Hits`
-- `fast_count_overlaps()`: integer vector
-- `fast_overlaps_any()`: logical vector
-- `fast_nearest()`, `fast_distance_to_nearest()`: `S4Vectors::DataFrame`
-- `fast_precede()`, `fast_follow()`: integer vector (with `NA` when unmatched)
-- `fast_overlap_join()` and join variants: `data.frame`
-- `fast_count_overlaps_by_group()`: integer matrix
-- `fast_overlap_aggregate()`: numeric vector
-- range algebra helpers: `IRanges`/`GRanges` objects
-- `fast_coverage()`: `Rle` or `RleList`
-- `fast_tile_coverage()`: `data.frame`
-- `fast_index_stats()`: `S4Vectors::DataFrame` (or list with detailed output)
-
 ## Installation
 
-### Bioconductor (when available)
+### Bioconductor
 
 ```r
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
@@ -110,7 +25,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 BiocManager::install("fastRanges")
 ```
 
-### GitHub `main`
+### GitHub
 
 ```r
 if (!requireNamespace("remotes", quietly = TRUE)) {
@@ -129,118 +44,108 @@ data("fast_ranges_example", package = "fastRanges")
 query <- fast_ranges_example$query
 subject <- fast_ranges_example$subject
 
+# One-off overlap call
 hits <- fast_find_overlaps(query, subject, threads = 4)
-counts <- fast_count_overlaps(query, subject, threads = 4)
-joined <- fast_overlap_join(query, subject, threads = 4)
 
-# Build once, reuse many times
+# Repeated-query workflow
 subject_index <- fast_build_index(subject)
 hits_indexed <- fast_find_overlaps(query, subject_index, threads = 4)
 
-S4Vectors::mcols(subject)$type <- sample(c("A", "B"), length(subject), replace = TRUE)
-S4Vectors::mcols(subject)$score <- seq_len(length(subject))
-group_counts <- fast_count_overlaps_by_group(query, subject, group_col = "type", threads = 4)
-sum_score <- fast_overlap_aggregate(query, subject, value_col = "score", fun = "sum", threads = 4)
+# Derived summaries
+counts <- fast_count_overlaps(query, subject_index, threads = 4)
+joined <- fast_overlap_join(query, subject, threads = 4)
 ```
 
-## Example Data
-
-The package ships with a small reproducible example dataset for learning and
-testing:
+The package ships a small in-memory example object and matching BED files:
 
 ```r
 data("fast_ranges_example", package = "fastRanges")
 names(fast_ranges_example)
-```
 
-It contains:
-
-- `query`: 6 genomic intervals with metadata columns `query_id` and `score`
-- `subject`: 7 genomic intervals with metadata columns `gene_id` and `biotype`
-
-Use it when you want documentation examples to run immediately without reading
-files from disk.
-
-Matching BED files are also shipped in `inst/extdata`:
-
-```r
 system.file("extdata", "query_peaks.bed", package = "fastRanges")
 system.file("extdata", "subject_genes.bed", package = "fastRanges")
 ```
 
-Use those files when you want to demonstrate import from BED or compare
-file-based workflows with in-memory `GRanges` analysis.
+## Function Grammar
 
-## Function Guide
-
-### Overlap Core
+### Overlap Grammar
 
 - `fast_find_overlaps()`: return overlap pairs as `Hits`
 - `fast_count_overlaps()`: per-query overlap counts
 - `fast_overlaps_any()`: per-query logical overlap flag
-- `fast_build_index()`: build reusable subject index
+- `fast_build_index()`: build a reusable subject index
 
-### Join Operations
+### Join Grammar
 
-- `fast_overlap_join()`: inner/left overlap join
+- `fast_overlap_join()`: overlap join with `join = "inner"` or `"left"`
 - `fast_inner_overlap_join()`, `fast_left_overlap_join()`
 - `fast_semi_overlap_join()`, `fast_anti_overlap_join()`
 
-### Nearest and Directional Queries
+### Nearest Grammar
 
 - `fast_nearest()`, `fast_distance_to_nearest()`
 - `fast_precede()`, `fast_follow()`
 
-### Overlap Analytics
+### Summary Grammar
 
 - `fast_count_overlaps_by_group()`
 - `fast_overlap_aggregate()`
 - `fast_window_count_overlaps()`
 - `fast_self_overlaps()`, `fast_cluster_overlaps()`
 
-### Range Algebra
+### Range Grammar
 
 - `fast_reduce()`, `fast_disjoin()`, `fast_gaps()`
 - `fast_range_union()`, `fast_range_intersect()`, `fast_range_setdiff()`
 
-### Coverage and Binning
+### Coverage Grammar
 
 - `fast_coverage()`
 - `fast_tile_coverage()`
 
-### Index Persistence
+### Index and Iteration Grammar
 
 - `fast_save_index()`, `fast_load_index()`, `fast_index_stats()`
-
-### Chunked Iteration
-
 - `fast_find_overlaps_iter()`
 - `fast_iter_has_next()`, `fast_iter_next()`
 - `fast_iter_reset()`, `fast_iter_collect()`
 
-## Benchmarking
+## Benchmark Highlights
 
-For benchmarking and result interpretation, use the following entry points:
+Saved benchmark results on a 96-core Linux server show:
 
-- [Benchmark Summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
-- [Benchmark Runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_bioc.qmd)
-- [Benchmark Interpretation Report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_result_interpretation.qmd)
+- about `5.19x` to `5.40x` `GRanges` speedup for indexed `fastRanges` versus
+  `GenomicRanges::findOverlaps()`
+- about `4.90x` speedup in repeated-query workloads when the subject index is
+  reused
+- continued scaling on dense `GRanges` and large `IRanges` workloads
+- retained gains in grouped counting and overlap aggregation
 
-Recommended workflow:
+| GRanges speedup vs baseline | Repeated-query speedup |
+|---|---|
+| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_gr_speedup_bar.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_repeat_speedup_bar.png) |
 
-1. Run the large benchmark on the target machine with `benchmark_bioc.qmd`.
-2. Review the GitHub-friendly benchmark summary in `inst/benchmarks/README.md`.
-3. Render `benchmark_result_interpretation.qmd` for figure-rich post hoc
-   analysis from saved result tables.
+| Dense GRanges scaling | IRanges absolute runtime |
+|---|---|
+| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_ir_absolute_runtime.png) |
 
-Render with:
+Benchmark resources:
 
-```bash
-quarto render inst/benchmarks/benchmark_bioc.qmd -P max_threads:96
-```
+- [Benchmark summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
+- [Benchmark runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_bioc.qmd)
+- [Benchmark interpretation report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_result_interpretation.qmd)
+- [Conference presentation deck](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_presentation.qmd)
 
-Interpret saved results with:
+## Practical Use
 
-```bash
-quarto render inst/benchmarks/benchmark_result_interpretation.qmd
-```
+- Use direct mode for one-off overlap calls.
+- Use `fast_build_index(subject)` when the same annotation is queried many
+  times.
+- Use higher `threads` for large workloads on multicore machines.
+- Keep `deterministic = TRUE` when stable output ordering matters.
+
+## Documentation
+
+- [Pkgdown site](https://cparsania.github.io/fastRanges/)
+- [Getting started vignette](https://cparsania.github.io/fastRanges/articles/fastRanges.html)
+- [Benchmark summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
