@@ -1,6 +1,10 @@
 /.quarto/
 **/*.quarto_ipynb
 /benchmark_bioc_files/
+benchmark_presentation.qmd
+benchmark_presentation.pptx
+benchmark_presentation_files/
 /*.html
+/*.pptx
 /*.knit.md
 /*_files/
