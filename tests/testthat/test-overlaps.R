@@ -206,3 +206,86 @@ test_that("equal semantics with max_gap match GenomicRanges", {
   expect_equal(canon_hits(got0), canon_hits(ref0))
   expect_equal(canon_hits(got5), canon_hits(ref5))
 })
+
+test_that("empty GRanges inputs return empty-compatible outputs", {
+  q <- GenomicRanges::GRanges()
+  s <- GenomicRanges::GRanges()
+
+  h <- fast_find_overlaps(q, s, threads = 2)
+  counts <- fast_count_overlaps(q, s, threads = 2)
+  any_hits <- fast_overlaps_any(q, s, threads = 2)
+
+  expect_s4_class(h, "Hits")
+  expect_length(h, 0L)
+  expect_identical(as.integer(counts), integer())
+  expect_identical(as.logical(any_hits), logical())
+})
+
+test_that("single-range no-hit cases match GenomicRanges", {
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 10L, end = 20L), strand = "+")
+  s <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 30L, end = 40L), strand = "+")
+
+  ref <- GenomicRanges::findOverlaps(q, s, ignore.strand = FALSE)
+  got <- fast_find_overlaps(q, s, threads = 2)
+
+  expect_equal(canon_hits(got), canon_hits(ref))
+  expect_identical(as.integer(fast_count_overlaps(q, s, threads = 2)), 0L)
+  expect_identical(as.logical(fast_overlaps_any(q, s, threads = 2)), FALSE)
+})
+
+test_that("no shared seqlevels produce zero hits", {
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(1L, 10L), width = 5L), strand = c("+", "-"))
+  s <- GenomicRanges::GRanges("chr9", IRanges::IRanges(start = c(1L, 10L), width = 5L), strand = c("+", "-"))
+
+  got <- suppressWarnings(fast_find_overlaps(q, s, threads = 2))
+  expect_length(got, 0L)
+  expect_identical(as.integer(fast_count_overlaps(q, s, threads = 2)), c(0L, 0L))
+  expect_identical(as.logical(fast_overlaps_any(q, s, threads = 2)), c(FALSE, FALSE))
+})
+
+test_that("all-star strand inputs behave like ignore_strand TRUE baseline", {
+  q <- GenomicRanges::GRanges(
+    "chr1",
+    IRanges::IRanges(start = c(5L, 15L), width = c(5L, 5L)),
+    strand = "*"
+  )
+  s <- GenomicRanges::GRanges(
+    "chr1",
+    IRanges::IRanges(start = c(1L, 15L), width = c(10L, 5L)),
+    strand = "*"
+  )
+
+  ref <- GenomicRanges::findOverlaps(q, s, ignore.strand = TRUE)
+  got_false <- fast_find_overlaps(q, s, ignore_strand = FALSE, threads = 2)
+  got_true <- fast_find_overlaps(q, s, ignore_strand = TRUE, threads = 2)
+
+  expect_equal(canon_hits(got_false), canon_hits(ref))
+  expect_equal(canon_hits(got_true), canon_hits(ref))
+})
+
+test_that("deterministic indexed GRanges output is stable across threads", {
+  set.seed(99)
+  q <- GenomicRanges::GRanges(
+    seqnames = sample(c("chr1", "chr2"), 300L, replace = TRUE),
+    ranges = IRanges::IRanges(
+      start = sample.int(5000L, 300L, replace = TRUE),
+      width = sample.int(50L, 300L, replace = TRUE)
+    ),
+    strand = sample(c("+", "-", "*"), 300L, replace = TRUE)
+  )
+  s <- GenomicRanges::GRanges(
+    seqnames = sample(c("chr1", "chr2"), 900L, replace = TRUE),
+    ranges = IRanges::IRanges(
+      start = sample.int(5000L, 900L, replace = TRUE),
+      width = sample.int(50L, 900L, replace = TRUE)
+    ),
+    strand = sample(c("+", "-", "*"), 900L, replace = TRUE)
+  )
+  idx <- fast_build_index(s)
+
+  h1 <- fast_find_overlaps(q, idx, threads = 1, deterministic = TRUE)
+  h8 <- fast_find_overlaps(q, idx, threads = 8, deterministic = TRUE)
+
+  expect_identical(S4Vectors::queryHits(h1), S4Vectors::queryHits(h8))
+  expect_identical(S4Vectors::subjectHits(h1), S4Vectors::subjectHits(h8))
+})

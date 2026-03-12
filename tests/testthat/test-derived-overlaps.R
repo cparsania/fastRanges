@@ -97,3 +97,55 @@ test_that("fast_gaps matches GenomicRanges when GRanges bounds are implicit", {
     GenomicRanges::gaps(x, ignore.strand = TRUE)
   )
 })
+
+test_that("self overlaps and clustering handle empty and isolated inputs", {
+  empty_ir <- IRanges::IRanges()
+  empty_hits <- fast_self_overlaps(empty_ir)
+  empty_clusters <- fast_cluster_overlaps(empty_ir)
+  empty_df <- fast_cluster_overlaps(empty_ir, return = "data.frame")
+
+  expect_length(empty_hits, 0L)
+  expect_identical(empty_clusters, integer())
+  expect_equal(nrow(empty_df), 0L)
+
+  isolated <- IRanges::IRanges(start = c(1L, 20L, 40L), width = c(3L, 3L, 3L))
+  cl <- fast_cluster_overlaps(isolated)
+  expect_identical(cl, c(1L, 2L, 3L))
+})
+
+test_that("window count handles no-hit and strand-sensitive cases", {
+  q <- GenomicRanges::GRanges(
+    seqnames = c("chr1", "chr1"),
+    ranges = IRanges::IRanges(start = c(1L, 20L), end = c(10L, 30L)),
+    strand = c("+", "-")
+  )
+  s <- GenomicRanges::GRanges(
+    seqnames = c("chr1", "chr1"),
+    ranges = IRanges::IRanges(start = c(50L, 60L), end = c(55L, 65L)),
+    strand = c("+", "-")
+  )
+
+  got_zero <- fast_window_count_overlaps(q, s, window_width = 10L, step_width = 10L, threads = 2)
+  expect_true(all(got_zero$overlap_count == 0L))
+
+  s2 <- GenomicRanges::GRanges(
+    seqnames = c("chr1", "chr1"),
+    ranges = IRanges::IRanges(start = c(2L, 21L), end = c(4L, 22L)),
+    strand = c("-", "+")
+  )
+  ref <- GenomicRanges::countOverlaps(
+    GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(1L, 11L, 21L), width = 10L), strand = "*"),
+    s2,
+    ignore.strand = TRUE
+  )
+  got <- fast_window_count_overlaps(
+    q,
+    s2,
+    window_width = 10L,
+    step_width = 10L,
+    ignore_strand = TRUE,
+    threads = 2
+  )
+
+  expect_equal(got$overlap_count, as.integer(ref))
+})

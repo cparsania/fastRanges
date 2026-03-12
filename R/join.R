@@ -85,7 +85,10 @@ fast_overlap_join <- function(
   hit_map <- data.frame(query_id = q_idx, subject_id = s_idx)
   all_query <- data.frame(query_id = seq_len(length(query)))
   if (nrow(hit_map) == 0L) {
-    joined <- transform(all_query, subject_id = NA_integer_)
+    joined <- data.frame(
+      query_id = all_query$query_id,
+      subject_id = rep.int(NA_integer_, nrow(all_query))
+    )
   } else {
     joined <- merge(all_query, hit_map, by = "query_id", all.x = TRUE, sort = FALSE)
   }
