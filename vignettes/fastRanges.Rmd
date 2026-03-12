@@ -545,10 +545,21 @@ rbind(
 c(base_hits = length(h_base), fast_hits = length(h_fast))
 ```
 
-For larger benchmark studies, see:
+## Benchmark Resources
 
-- `inst/benchmarks/README.md`
-- `inst/benchmarks/benchmark_bioc.qmd`
+The vignette example above is intentionally small. For large benchmark studies,
+repeated-query experiments, and figure-rich interpretation, use the benchmark
+resources maintained in the repository:
+
+- [Benchmark summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
+- [Benchmark runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_bioc.qmd)
+- [Benchmark interpretation report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_result_interpretation.qmd)
+
+This separation is deliberate:
+
+- the vignette stays fast and reproducible on ordinary machines
+- the benchmark runner can be executed on larger servers
+- the interpretation report can be rendered later from saved result tables
 
 ## Package Example Files
 

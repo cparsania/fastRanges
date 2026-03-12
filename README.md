@@ -222,9 +222,9 @@ file-based workflows with in-memory `GRanges` analysis.
 
 For benchmarking and result interpretation, use the following entry points:
 
-- [Benchmark Summary](inst/benchmarks/README.md)
-- [Benchmark Runner](inst/benchmarks/benchmark_bioc.qmd)
-- [Benchmark Interpretation Report](inst/benchmarks/benchmark_result_interpretation.qmd)
+- [Benchmark Summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
+- [Benchmark Runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_bioc.qmd)
+- [Benchmark Interpretation Report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_result_interpretation.qmd)
 
 Recommended workflow:
 
