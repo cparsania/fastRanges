@@ -33,10 +33,11 @@ inline bool interval_match(const int q_start,
                            const int max_gap,
                            const int min_overlap,
                            const int type_id) {
-  const int overlap = std::min(q_end, s_end) - std::max(q_start, s_start) + 1;
+  const int overlap_raw = std::min(q_end, s_end) - std::max(q_start, s_start) + 1;
+  const int overlap_width = std::max(0, overlap_raw);
 
   int gap = -1;
-  if (overlap < 1) {
+  if (overlap_raw < 1) {
     if (s_start > q_end) {
       gap = s_start - q_end - 1;
     } else {
@@ -45,13 +46,13 @@ inline bool interval_match(const int q_start,
   }
 
   if (max_gap < 0) {
-    if (overlap < 1) return false;
+    if (overlap_raw < 1) return false;
   } else {
     if (gap > max_gap) return false;
   }
 
   const int required_overlap = std::max(min_overlap, max_gap < 0 ? 1 : 0);
-  if (overlap < required_overlap) return false;
+  if (overlap_width < required_overlap) return false;
 
   switch (type_id) {
   case 0:
@@ -115,6 +116,7 @@ Rcpp::List cpp_find_overlaps_indexed(
 
   const int type_id = to_type_id(type);
   const int scan_gap = (max_gap < 0) ? 0 : max_gap;
+  const int scan_pad = (max_gap < 0) ? 0 : 1;
 
   std::unordered_map<int, int> partition_by_key;
   partition_by_key.reserve(static_cast<std::size_t>(partition_keys.size() * 2));
@@ -177,7 +179,9 @@ Rcpp::List cpp_find_overlaps_indexed(
       for (std::size_t q_pos = 0; q_pos < q_idx.size(); ++q_pos) {
         const int qi = q_idx[q_pos];
         const int ql = q_start[qi];
-        while (left <= s_end_idx && static_cast<long long>(s_end[left]) < (static_cast<long long>(ql) - scan_gap)) {
+        while (left <= s_end_idx &&
+               static_cast<long long>(s_end[left]) <
+                 (static_cast<long long>(ql) - scan_gap - scan_pad)) {
           ++left;
         }
         left_starts[q_pos] = left;
@@ -231,7 +235,8 @@ Rcpp::List cpp_find_overlaps_indexed(
       }
 
       for (int sj = left; sj <= s_end_idx; ++sj) {
-        if (static_cast<long long>(s_start[sj]) > (static_cast<long long>(qr) + scan_gap)) {
+        if (static_cast<long long>(s_start[sj]) >
+              (static_cast<long long>(qr) + scan_gap + scan_pad)) {
           break;
         }
 
@@ -358,6 +363,7 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
 
   const int type_id = to_type_id(type);
   const int scan_gap = (max_gap < 0) ? 0 : max_gap;
+  const int scan_pad = (max_gap < 0) ? 0 : 1;
   const int thread_count = std::max(1, threads);
   const int min_chunk_size = 8192;
   const int target_chunks_per_thread = 4;
@@ -417,7 +423,9 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
       for (std::size_t q_pos = 0; q_pos < q_idx.size(); ++q_pos) {
         const int qi = q_idx[q_pos];
         const int ql = q_start[qi];
-        while (left <= s_end_idx && static_cast<long long>(s_end[left]) < (static_cast<long long>(ql) - scan_gap)) {
+        while (left <= s_end_idx &&
+               static_cast<long long>(s_end[left]) <
+                 (static_cast<long long>(ql) - scan_gap - scan_pad)) {
           ++left;
         }
         left_starts[q_pos] = left;
@@ -464,7 +472,8 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
 
       int count = 0;
       for (int sj = left; sj <= s_end_idx; ++sj) {
-        if (static_cast<long long>(s_start[sj]) > (static_cast<long long>(qr) + scan_gap)) {
+        if (static_cast<long long>(s_start[sj]) >
+              (static_cast<long long>(qr) + scan_gap + scan_pad)) {
           break;
         }
 
