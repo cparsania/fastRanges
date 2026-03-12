@@ -11,7 +11,7 @@ NULL
     type,
     threads) {
   .assert_supported_ranges(query, "query")
-  type <- match.arg(type)
+  type <- match.arg(type, c("any", "start", "end", "within", "equal"))
   .assert_scalar_integerish(max_gap, "max_gap")
   .assert_scalar_integerish(min_overlap, "min_overlap")
   threads <- .normalize_threads(threads)

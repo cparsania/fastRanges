@@ -80,41 +80,12 @@ if (!1L %in% thread_grid) thread_grid <- sort(unique(c(1L, thread_grid)))
 if (!max_threads %in% thread_grid) thread_grid <- sort(unique(c(thread_grid, max_threads)))
 
 input_file <- knitr::current_input(dir = TRUE)
-input_dir <- dirname(input_file)
+output_root <- normalizePath(file.path(getwd(), "benchmark_result"), winslash = "/", mustWork = FALSE)
+if (!dir.exists(output_root)) dir.create(output_root, recursive = TRUE)
 
-resolve_project_root <- function(input_dir) {
-  env_root <- Sys.getenv("FASTRANGES_BENCH_ROOT", unset = "")
-  if (nzchar(env_root)) {
-    env_root <- normalizePath(env_root, winslash = "/", mustWork = TRUE)
-    if (!file.exists(file.path(env_root, "DESCRIPTION"))) {
-      stop("FASTRANGES_BENCH_ROOT is set but DESCRIPTION not found at: ", env_root)
-    }
-    return(env_root)
-  }
-
-  candidate_roots <- unique(c(
-    normalizePath(getwd(), winslash = "/", mustWork = TRUE),
-    normalizePath(file.path(input_dir, "..", ".."), winslash = "/", mustWork = FALSE),
-    normalizePath(input_dir, winslash = "/", mustWork = FALSE)
-  ))
-
-  for (cand in candidate_roots) {
-    if (file.exists(file.path(cand, "DESCRIPTION")) &&
-        dir.exists(file.path(cand, "inst", "benchmarks"))) {
-      return(cand)
-    }
-  }
-
-  stop(
-    "Could not detect fastRanges project root. ",
-    "Run from package root or set FASTRANGES_BENCH_ROOT=/path/to/fastRanges."
-  )
-}
-
-proj_dir <- resolve_project_root(input_dir)
-fig_dir <- file.path(proj_dir, "inst", "benchmarks", "figures")
+fig_dir <- file.path(output_root, "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
-results_dir <- file.path(proj_dir, "inst", "benchmarks", "results")
+results_dir <- file.path(output_root, "results")
 if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
 
 write_result_table <- function(tbl, name) {
@@ -193,7 +164,7 @@ cat("Detected physical cores =", available_threads, "\n")
 cat("Using benchmark max_threads =", max_threads, "\n")
 cat("Thread grid =", paste(thread_grid, collapse = ", "), "\n")
 cat("Input qmd =", input_file, "\n")
-cat("Resolved project root =", proj_dir, "\n")
+cat("Benchmark output root =", output_root, "\n")
 cat("Results directory =", results_dir, "\n")
 ```
 
@@ -959,5 +930,5 @@ sessionInfo()
 
 -   Default parameters are intentionally large to expose differences in algorithmic and indexing behavior.
 -   Use chunk caching or higher-memory machines for full publication runs.
--   All figures are exported to `inst/benchmarks/figures/` for manuscript use, including derived-function runtime and speedup panels.
--   Raw and summary benchmark tables are exported as CSV files in `inst/benchmarks/results/` with a manifest file (`benchmark_table_manifest.csv`) for downstream plotting workflows.
+-   All figures are exported to `./benchmark_result/figures/` for manuscript use, including derived-function runtime and speedup panels.
+-   Raw and summary benchmark tables are exported as CSV files in `./benchmark_result/results/` with a manifest file (`benchmark_table_manifest.csv`) for downstream plotting workflows.
