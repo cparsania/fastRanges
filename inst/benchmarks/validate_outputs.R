@@ -81,15 +81,25 @@ manual_group_counts <- function(query, subject, group_col, include_na_group = FA
   out
 }
 
-manual_overlap_aggregate <- function(query, subject, value_col, fun, na_rm = TRUE, hits = NULL) {
+manual_overlap_aggregate <- function(
+    query,
+    subject,
+    value_col,
+    fun,
+    na_rm = TRUE,
+    hits = NULL,
+    ignore_strand = FALSE) {
   if (fun == "count") {
-    return(as.numeric(GenomicRanges::countOverlaps(query, subject, ignore.strand = FALSE)))
+    if (!is.null(hits)) {
+      return(as.numeric(tabulate(S4Vectors::queryHits(hits), nbins = length(query))))
+    }
+    return(as.numeric(GenomicRanges::countOverlaps(query, subject, ignore.strand = ignore_strand)))
   }
   values <- as.numeric(S4Vectors::mcols(subject)[[value_col]])
   out <- rep(NA_real_, length(query))
 
   if (is.null(hits)) {
-    hits <- GenomicRanges::findOverlaps(query, subject, ignore.strand = FALSE)
+    hits <- GenomicRanges::findOverlaps(query, subject, ignore.strand = ignore_strand)
   }
   if (length(hits) == 0L) return(out)
 
@@ -116,7 +126,7 @@ manual_overlap_aggregate <- function(query, subject, value_col, fun, na_rm = TRU
   out
 }
 
-baseline_window_count <- function(query, subject, window_width, step_width) {
+baseline_window_count <- function(query, subject, window_width, step_width, ignore_strand = FALSE) {
   seq_chr <- as.character(GenomicRanges::seqnames(query))
   split_idx <- split(seq_len(length(query)), seq_chr)
 
@@ -133,7 +143,7 @@ baseline_window_count <- function(query, subject, window_width, step_width) {
     )
   }
   windows <- do.call(c, pieces)
-  counts <- GenomicRanges::countOverlaps(windows, subject, ignore.strand = FALSE)
+  counts <- GenomicRanges::countOverlaps(windows, subject, ignore.strand = ignore_strand)
   data.frame(
     seqnames = as.character(GenomicRanges::seqnames(windows)),
     start = IRanges::start(windows),
@@ -325,12 +335,22 @@ args <- commandArgs(trailingOnly = TRUE)
 n_iter <- as.integer(get_arg(args, "iters", Sys.getenv("FASTRANGES_VALIDATE_ITERS", "5")))
 seed <- as.integer(get_arg(args, "seed", Sys.getenv("FASTRANGES_VALIDATE_SEED", "42")))
 threads <- as.integer(get_arg(args, "threads", Sys.getenv("FASTRANGES_VALIDATE_THREADS", "8")))
+q_gr_n <- as.integer(get_arg(args, "q_gr_n", Sys.getenv("FASTRANGES_VALIDATE_Q_GR_N", "250")))
+s_gr_n <- as.integer(get_arg(args, "s_gr_n", Sys.getenv("FASTRANGES_VALIDATE_S_GR_N", "900")))
+q_ir_n <- as.integer(get_arg(args, "q_ir_n", Sys.getenv("FASTRANGES_VALIDATE_Q_IR_N", "220")))
+s_ir_n <- as.integer(get_arg(args, "s_ir_n", Sys.getenv("FASTRANGES_VALIDATE_S_IR_N", "880")))
 threads <- max(1L, threads)
+q_gr_n <- max(100L, q_gr_n)
+s_gr_n <- max(100L, s_gr_n)
+q_ir_n <- max(100L, q_ir_n)
+s_ir_n <- max(100L, s_ir_n)
 
 set.seed(seed)
 
 message("fastRanges validation started")
 message("iters=", n_iter, " seed=", seed, " threads=", threads)
+message("GRanges sizes: query=", q_gr_n, " subject=", s_gr_n)
+message("IRanges sizes: query=", q_ir_n, " subject=", s_ir_n)
 
 types <- c("any", "start", "end", "within", "equal")
 max_gaps <- c(-1L, 0L, 5L)
@@ -488,83 +508,89 @@ if (!identical(fastRanges::fast_follow(xi, yi, threads = threads), IRanges::foll
 }
 
 for (iter in seq_len(n_iter)) {
-  qg <- make_granges(250L, seed + iter * 10L)
-  sg <- make_granges(900L, seed + iter * 10L + 1L)
+  qg <- make_granges(q_gr_n, seed + iter * 10L)
+  sg <- make_granges(s_gr_n, seed + iter * 10L + 1L)
   S4Vectors::mcols(sg)$grp <- sample(c("A", "B", "C", NA_character_), length(sg), replace = TRUE)
   S4Vectors::mcols(sg)$score <- stats::rnorm(length(sg), mean = 2, sd = 1)
 
   idx <- fastRanges::fast_build_index(sg)
 
-  for (type in types) {
-    for (max_gap in max_gaps) {
-      for (min_overlap in min_overlaps) {
-        if (!is_valid_bioc_combo(type, max_gap, min_overlap)) {
-          next
-        }
+  for (ignore_strand in c(FALSE, TRUE)) {
+    for (type in types) {
+      for (max_gap in max_gaps) {
+        for (min_overlap in min_overlaps) {
+          if (!is_valid_bioc_combo(type, max_gap, min_overlap)) {
+            next
+          }
 
-        ref <- GenomicRanges::findOverlaps(
-          qg, sg,
-          maxgap = max_gap,
-          minoverlap = min_overlap,
-          type = type,
-          ignore.strand = FALSE
-        )
-        got_direct <- fastRanges::fast_find_overlaps(
-          qg, sg,
-          max_gap = max_gap,
-          min_overlap = min_overlap,
-          type = type,
-          ignore_strand = FALSE,
-          threads = threads
-        )
-        got_index <- fastRanges::fast_find_overlaps(
-          qg, idx,
-          max_gap = max_gap,
-          min_overlap = min_overlap,
-          type = type,
-          ignore_strand = FALSE,
-          threads = threads
-        )
-        if (!isTRUE(all.equal(canon_hits(got_direct), canon_hits(ref), check.attributes = FALSE))) {
-          stop("Mismatch: fast_find_overlaps direct vs GenomicRanges at iter=", iter,
-               " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
-        }
-        if (!isTRUE(all.equal(canon_hits(got_index), canon_hits(ref), check.attributes = FALSE))) {
-          stop("Mismatch: fast_find_overlaps index vs GenomicRanges at iter=", iter,
-               " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
-        }
+          ref <- GenomicRanges::findOverlaps(
+            qg, sg,
+            maxgap = max_gap,
+            minoverlap = min_overlap,
+            type = type,
+            ignore.strand = ignore_strand
+          )
+          got_direct <- fastRanges::fast_find_overlaps(
+            qg, sg,
+            max_gap = max_gap,
+            min_overlap = min_overlap,
+            type = type,
+            ignore_strand = ignore_strand,
+            threads = threads
+          )
+          got_index <- fastRanges::fast_find_overlaps(
+            qg, idx,
+            max_gap = max_gap,
+            min_overlap = min_overlap,
+            type = type,
+            ignore_strand = ignore_strand,
+            threads = threads
+          )
+          if (!isTRUE(all.equal(canon_hits(got_direct), canon_hits(ref), check.attributes = FALSE))) {
+            stop("Mismatch: fast_find_overlaps direct vs GenomicRanges at iter=", iter,
+                 " ignore_strand=", ignore_strand,
+                 " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          }
+          if (!isTRUE(all.equal(canon_hits(got_index), canon_hits(ref), check.attributes = FALSE))) {
+            stop("Mismatch: fast_find_overlaps index vs GenomicRanges at iter=", iter,
+                 " ignore_strand=", ignore_strand,
+                 " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          }
 
-        cnt <- fastRanges::fast_count_overlaps(
-          qg, idx,
-          max_gap = max_gap,
-          min_overlap = min_overlap,
-          type = type,
-          ignore_strand = FALSE,
-          threads = threads
-        )
-        ref_cnt <- as.integer(GenomicRanges::countOverlaps(
-          qg, sg,
-          maxgap = max_gap,
-          minoverlap = min_overlap,
-          type = type,
-          ignore.strand = FALSE
-        ))
-        if (!identical(as.integer(cnt), ref_cnt)) {
-          stop("Mismatch: fast_count_overlaps at iter=", iter,
-               " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
-        }
+          cnt <- fastRanges::fast_count_overlaps(
+            qg, idx,
+            max_gap = max_gap,
+            min_overlap = min_overlap,
+            type = type,
+            ignore_strand = ignore_strand,
+            threads = threads
+          )
+          ref_cnt <- as.integer(GenomicRanges::countOverlaps(
+            qg, sg,
+            maxgap = max_gap,
+            minoverlap = min_overlap,
+            type = type,
+            ignore.strand = ignore_strand
+          ))
+          if (!identical(as.integer(cnt), ref_cnt)) {
+            stop("Mismatch: fast_count_overlaps at iter=", iter,
+                 " ignore_strand=", ignore_strand,
+                 " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          }
 
-        any_got <- fastRanges::fast_overlaps_any(
-          qg, idx,
-          max_gap = max_gap,
-          min_overlap = min_overlap,
-          type = type,
-          ignore_strand = FALSE,
-          threads = threads
-        )
-        if (!identical(as.logical(any_got), ref_cnt > 0L)) {
-          stop("Mismatch: fast_overlaps_any at iter=", iter,
-               " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          any_got <- fastRanges::fast_overlaps_any(
+            qg, idx,
+            max_gap = max_gap,
+            min_overlap = min_overlap,
+            type = type,
+            ignore_strand = ignore_strand,
+            threads = threads
+          )
+          if (!identical(as.logical(any_got), ref_cnt > 0L)) {
+            stop("Mismatch: fast_overlaps_any at iter=", iter,
+                 " ignore_strand=", ignore_strand,
+                 " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          }
         }
       }
     }
@@ -612,111 +638,192 @@ for (iter in seq_len(n_iter)) {
     stop("Mismatch: fast_iter_collect indexed at iter=", iter)
   }
 
-  # Join family.
-  ref_join_hits <- ref_all_default
-  join_inner_ref <- baseline_overlap_join(qg, sg, join = "inner", hits = ref_join_hits)
-  join_left_ref <- baseline_overlap_join(qg, sg, join = "left", hits = ref_join_hits)
-  counts_default <- as.integer(GenomicRanges::countOverlaps(qg, sg, ignore.strand = FALSE))
-  semi_ref <- baseline_semi_join(qg, counts_default)
-  anti_ref <- baseline_anti_join(qg, counts_default)
+  for (ignore_strand in c(FALSE, TRUE)) {
+    # Join family.
+    ref_join_hits <- GenomicRanges::findOverlaps(qg, sg, ignore.strand = ignore_strand)
+    join_inner_ref <- baseline_overlap_join(qg, sg, join = "inner", hits = ref_join_hits)
+    join_left_ref <- baseline_overlap_join(qg, sg, join = "left", hits = ref_join_hits)
+    counts_default <- as.integer(GenomicRanges::countOverlaps(qg, sg, ignore.strand = ignore_strand))
+    semi_ref <- baseline_semi_join(qg, counts_default)
+    anti_ref <- baseline_anti_join(qg, counts_default)
 
-  join_inner_got <- fastRanges::fast_overlap_join(qg, sg, join = "inner", threads = threads, deterministic = TRUE)
-  join_left_got <- fastRanges::fast_overlap_join(qg, sg, join = "left", threads = threads, deterministic = TRUE)
-  inner_wrap_got <- fastRanges::fast_inner_overlap_join(qg, sg, threads = threads, deterministic = TRUE)
-  left_wrap_got <- fastRanges::fast_left_overlap_join(qg, sg, threads = threads, deterministic = TRUE)
-  semi_got <- fastRanges::fast_semi_overlap_join(qg, sg, threads = threads, deterministic = TRUE)
-  anti_got <- fastRanges::fast_anti_overlap_join(qg, sg, threads = threads, deterministic = TRUE)
-
-  if (!equal_df(join_inner_got, join_inner_ref, sort_by = c("query_id", "subject_id"))) {
-    stop("Mismatch: fast_overlap_join(inner) at iter=", iter)
-  }
-  if (!equal_df(join_left_got, join_left_ref, sort_by = c("query_id", "subject_id"))) {
-    stop("Mismatch: fast_overlap_join(left) at iter=", iter)
-  }
-  if (!equal_df(inner_wrap_got, join_inner_ref, sort_by = c("query_id", "subject_id"))) {
-    stop("Mismatch: fast_inner_overlap_join at iter=", iter)
-  }
-  if (!equal_df(left_wrap_got, join_left_ref, sort_by = c("query_id", "subject_id"))) {
-    stop("Mismatch: fast_left_overlap_join at iter=", iter)
-  }
-  if (!equal_df(semi_got, semi_ref, sort_by = "query_id")) {
-    stop("Mismatch: fast_semi_overlap_join at iter=", iter)
-  }
-  if (!equal_df(anti_got, anti_ref, sort_by = "query_id")) {
-    stop("Mismatch: fast_anti_overlap_join at iter=", iter)
-  }
-
-  # Group counts and aggregates.
-  got_grp <- fastRanges::fast_count_overlaps_by_group(
-    qg, sg,
-    group_col = "grp",
-    include_na_group = TRUE,
-    threads = threads,
-    deterministic = FALSE
-  )
-  ref_grp <- manual_group_counts(qg, sg, "grp", include_na_group = TRUE)
-  if (!isTRUE(all.equal(unname(got_grp[, colnames(ref_grp), drop = FALSE]), unname(ref_grp)))) {
-    stop("Mismatch: fast_count_overlaps_by_group at iter=", iter)
-  }
-
-  for (fun in c("count", "sum", "mean", "min", "max")) {
-    got_agg <- fastRanges::fast_overlap_aggregate(
+    join_inner_got <- fastRanges::fast_overlap_join(
       qg, sg,
-      value_col = if (fun == "count") NULL else "score",
-      fun = fun,
+      join = "inner",
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+    join_left_got <- fastRanges::fast_overlap_join(
+      qg, sg,
+      join = "left",
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+    inner_wrap_got <- fastRanges::fast_inner_overlap_join(
+      qg, sg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+    left_wrap_got <- fastRanges::fast_left_overlap_join(
+      qg, sg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+    semi_got <- fastRanges::fast_semi_overlap_join(
+      qg, sg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+    anti_got <- fastRanges::fast_anti_overlap_join(
+      qg, sg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+
+    if (!equal_df(join_inner_got, join_inner_ref, sort_by = c("query_id", "subject_id"))) {
+      stop("Mismatch: fast_overlap_join(inner) at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    if (!equal_df(join_left_got, join_left_ref, sort_by = c("query_id", "subject_id"))) {
+      stop("Mismatch: fast_overlap_join(left) at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    if (!equal_df(inner_wrap_got, join_inner_ref, sort_by = c("query_id", "subject_id"))) {
+      stop("Mismatch: fast_inner_overlap_join at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    if (!equal_df(left_wrap_got, join_left_ref, sort_by = c("query_id", "subject_id"))) {
+      stop("Mismatch: fast_left_overlap_join at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    if (!equal_df(semi_got, semi_ref, sort_by = "query_id")) {
+      stop("Mismatch: fast_semi_overlap_join at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    if (!equal_df(anti_got, anti_ref, sort_by = "query_id")) {
+      stop("Mismatch: fast_anti_overlap_join at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+
+    # Group counts and aggregates.
+    got_grp <- fastRanges::fast_count_overlaps_by_group(
+      qg, sg,
+      group_col = "grp",
+      include_na_group = TRUE,
+      ignore_strand = ignore_strand,
       threads = threads,
       deterministic = FALSE
     )
-    ref_agg <- manual_overlap_aggregate(qg, sg, value_col = "score", fun = fun)
-    if (!isTRUE(all.equal(got_agg, ref_agg, tolerance = 1e-10, check.attributes = FALSE))) {
-      stop("Mismatch: fast_overlap_aggregate(", fun, ") at iter=", iter)
+    ref_grp <- manual_group_counts(qg, sg, "grp", include_na_group = TRUE, hits = ref_join_hits)
+    if (!isTRUE(all.equal(unname(got_grp[, colnames(ref_grp), drop = FALSE]), unname(ref_grp)))) {
+      stop("Mismatch: fast_count_overlaps_by_group at iter=", iter, " ignore_strand=", ignore_strand)
     }
-  }
 
-  # Self overlaps.
-  ref_self_all <- GenomicRanges::findOverlaps(qg, qg)
-  rq <- S4Vectors::queryHits(ref_self_all)
-  rs <- S4Vectors::subjectHits(ref_self_all)
-  keep <- rq != rs & rq < rs
-  ref_self <- S4Vectors::Hits(from = rq[keep], to = rs[keep], nLnode = length(qg), nRnode = length(qg))
-  got_self <- fastRanges::fast_self_overlaps(qg, threads = threads, deterministic = FALSE)
-  if (!isTRUE(all.equal(canon_hits(got_self), canon_hits(ref_self), check.attributes = FALSE))) {
-    stop("Mismatch: fast_self_overlaps at iter=", iter)
-  }
+    for (fun in c("count", "sum", "mean", "min", "max")) {
+      got_agg <- fastRanges::fast_overlap_aggregate(
+        qg, sg,
+        value_col = if (fun == "count") NULL else "score",
+        fun = fun,
+        ignore_strand = ignore_strand,
+        threads = threads,
+        deterministic = FALSE
+      )
+      ref_agg <- manual_overlap_aggregate(
+        qg, sg,
+        value_col = "score",
+        fun = fun,
+        hits = ref_join_hits,
+        ignore_strand = ignore_strand
+      )
+      if (!isTRUE(all.equal(got_agg, ref_agg, tolerance = 1e-10, check.attributes = FALSE))) {
+        stop("Mismatch: fast_overlap_aggregate(", fun, ") at iter=", iter, " ignore_strand=", ignore_strand)
+      }
+    }
 
-  # Window counts.
-  ww <- 1000L
-  sw <- 500L
-  got_w <- fastRanges::fast_window_count_overlaps(
-    qg, sg,
-    window_width = ww,
-    step_width = sw,
-    threads = threads,
-    deterministic = FALSE
-  )
-  ref_w <- baseline_window_count(qg, sg, window_width = ww, step_width = sw)
-  if (!identical(got_w$overlap_count, ref_w$overlap_count)) {
-    stop("Mismatch: fast_window_count_overlaps at iter=", iter)
-  }
+    # Self overlaps.
+    ref_self_all <- GenomicRanges::findOverlaps(qg, qg, ignore.strand = ignore_strand)
+    rq <- S4Vectors::queryHits(ref_self_all)
+    rs <- S4Vectors::subjectHits(ref_self_all)
+    keep <- rq != rs & rq < rs
+    ref_self <- S4Vectors::Hits(from = rq[keep], to = rs[keep], nLnode = length(qg), nRnode = length(qg))
+    got_self <- fastRanges::fast_self_overlaps(
+      qg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = FALSE
+    )
+    if (!isTRUE(all.equal(canon_hits(got_self), canon_hits(ref_self), check.attributes = FALSE))) {
+      stop("Mismatch: fast_self_overlaps at iter=", iter, " ignore_strand=", ignore_strand)
+    }
 
-  # Nearest/distance/precede/follow.
-  got_dn <- fastRanges::fast_distance_to_nearest(qg, sg, threads = threads, ignore_strand = FALSE)
-  ref_dn <- GenomicRanges::distanceToNearest(qg, sg, ignore.strand = FALSE)
-  if (!identical(as.integer(got_dn$query_id), as.integer(S4Vectors::queryHits(ref_dn))) ||
-      !identical(as.integer(got_dn$subject_id), as.integer(S4Vectors::subjectHits(ref_dn))) ||
-      !isTRUE(all.equal(as.numeric(got_dn$distance), as.numeric(S4Vectors::mcols(ref_dn)$distance), check.attributes = FALSE))) {
-    stop("Mismatch: fast_distance_to_nearest at iter=", iter)
-  }
-  got_nearest <- fastRanges::fast_nearest(qg, sg, threads = threads, ignore_strand = FALSE)
-  if (!isTRUE(all.equal(got_nearest, got_dn, check.attributes = FALSE))) {
-    stop("Mismatch: fast_nearest at iter=", iter)
-  }
+    # Window counts.
+    ww <- 1000L
+    sw <- 500L
+    got_w <- fastRanges::fast_window_count_overlaps(
+      qg, sg,
+      window_width = ww,
+      step_width = sw,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = FALSE
+    )
+    ref_w <- baseline_window_count(qg, sg, window_width = ww, step_width = sw, ignore_strand = ignore_strand)
+    if (!identical(got_w$overlap_count, ref_w$overlap_count)) {
+      stop("Mismatch: fast_window_count_overlaps at iter=", iter, " ignore_strand=", ignore_strand)
+    }
 
-  if (!identical(fastRanges::fast_precede(qg, sg), GenomicRanges::precede(qg, sg, ignore.strand = FALSE))) {
-    stop("Mismatch: fast_precede at iter=", iter)
-  }
-  if (!identical(fastRanges::fast_follow(qg, sg), GenomicRanges::follow(qg, sg, ignore.strand = FALSE))) {
-    stop("Mismatch: fast_follow at iter=", iter)
+    # Nearest/distance/precede/follow.
+    got_dn <- fastRanges::fast_distance_to_nearest(qg, sg, threads = threads, ignore_strand = ignore_strand)
+    ref_dn <- GenomicRanges::distanceToNearest(qg, sg, ignore.strand = ignore_strand)
+    if (!identical(as.integer(got_dn$query_id), as.integer(S4Vectors::queryHits(ref_dn))) ||
+        !identical(as.integer(got_dn$subject_id), as.integer(S4Vectors::subjectHits(ref_dn))) ||
+        !isTRUE(all.equal(as.numeric(got_dn$distance), as.numeric(S4Vectors::mcols(ref_dn)$distance), check.attributes = FALSE))) {
+      stop("Mismatch: fast_distance_to_nearest at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    got_nearest <- fastRanges::fast_nearest(qg, sg, threads = threads, ignore_strand = ignore_strand)
+    if (!isTRUE(all.equal(got_nearest, got_dn, check.attributes = FALSE))) {
+      stop("Mismatch: fast_nearest at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+
+    if (!identical(
+      fastRanges::fast_precede(qg, sg, ignore_strand = ignore_strand, threads = threads),
+      GenomicRanges::precede(qg, sg, ignore.strand = ignore_strand)
+    )) {
+      stop("Mismatch: fast_precede at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    if (!identical(
+      fastRanges::fast_follow(qg, sg, ignore_strand = ignore_strand, threads = threads),
+      GenomicRanges::follow(qg, sg, ignore.strand = ignore_strand)
+    )) {
+      stop("Mismatch: fast_follow at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+
+    # Clustering derived from self-overlap graph.
+    cl_got <- fastRanges::fast_cluster_overlaps(
+      qg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE
+    )
+    cl_ref <- cluster_from_hits(length(qg), ref_self)
+    if (!same_partition(cl_got, cl_ref)) {
+      stop("Mismatch: fast_cluster_overlaps vector at iter=", iter, " ignore_strand=", ignore_strand)
+    }
+    cl_df_got <- fastRanges::fast_cluster_overlaps(
+      qg,
+      ignore_strand = ignore_strand,
+      threads = threads,
+      deterministic = TRUE,
+      return = "data.frame"
+    )
+    if (!identical(as.integer(cl_df_got$range_id), seq_len(length(qg))) ||
+        !same_partition(cl_df_got$cluster_id, cl_ref) ||
+        !identical(
+          as.integer(cl_df_got$cluster_size),
+          as.integer(tabulate(cl_ref, nbins = max(cl_ref))[cl_ref])
+        )) {
+      stop("Mismatch: fast_cluster_overlaps data.frame at iter=", iter, " ignore_strand=", ignore_strand)
+    }
   }
 
   # Coverage and tile coverage.
@@ -732,28 +839,12 @@ for (iter in seq_len(n_iter)) {
   }
 
   # IRanges equivalence for core overlap.
-  qi <- make_iranges(220L, seed + iter * 100L)
-  si <- make_iranges(880L, seed + iter * 100L + 1L)
+  qi <- make_iranges(q_ir_n, seed + iter * 100L)
+  si <- make_iranges(s_ir_n, seed + iter * 100L + 1L)
   ref_i <- IRanges::findOverlaps(qi, si)
   got_i <- fastRanges::fast_find_overlaps(qi, si, threads = threads)
   if (!isTRUE(all.equal(canon_hits(got_i), canon_hits(ref_i), check.attributes = FALSE))) {
     stop("Mismatch: fast_find_overlaps IRanges at iter=", iter)
-  }
-
-  # Clustering derived from self-overlap graph.
-  cl_got <- fastRanges::fast_cluster_overlaps(qg, threads = threads, deterministic = TRUE)
-  cl_ref <- cluster_from_hits(length(qg), ref_self)
-  if (!same_partition(cl_got, cl_ref)) {
-    stop("Mismatch: fast_cluster_overlaps vector at iter=", iter)
-  }
-  cl_df_got <- fastRanges::fast_cluster_overlaps(qg, threads = threads, deterministic = TRUE, return = "data.frame")
-  if (!identical(as.integer(cl_df_got$range_id), seq_len(length(qg))) ||
-      !same_partition(cl_df_got$cluster_id, cl_ref) ||
-      !identical(
-        as.integer(cl_df_got$cluster_size),
-        as.integer(tabulate(cl_ref, nbins = max(cl_ref))[cl_ref])
-      )) {
-    stop("Mismatch: fast_cluster_overlaps data.frame at iter=", iter)
   }
 
   message("iter ", iter, "/", n_iter, " OK")
