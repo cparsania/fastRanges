@@ -16,11 +16,13 @@ fast_coverage(
 \arguments{
 \item{x}{An \code{IRanges} or \code{GRanges} object.}
 
-\item{shift}{Passed to \code{coverage()}.}
+\item{shift}{Passed to \code{coverage()}. Use this to shift intervals before
+computing coverage.}
 
-\item{width}{Passed to \code{coverage()}.}
+\item{width}{Passed to \code{coverage()}. Use this to force the output length.}
 
-\item{weight}{Passed to \code{coverage()}.}
+\item{weight}{Passed to \code{coverage()}. This can be a scalar or vector and is
+useful when intervals should contribute weighted counts instead of \code{1}.}
 
 \item{method}{Coverage method.}
 
@@ -31,6 +33,14 @@ fast_coverage(
 }
 \description{
 Compute per-position coverage for input ranges.
+}
+\details{
+Coverage answers the question: "how many ranges cover each position?"
+
+For \code{IRanges}, the result is one \code{Rle}.
+
+For \code{GRanges}, the result is an \code{RleList}, usually one coverage track per
+sequence level.
 }
 \examples{
 x <- IRanges::IRanges(start = c(1, 4, 10), end = c(5, 8, 12))

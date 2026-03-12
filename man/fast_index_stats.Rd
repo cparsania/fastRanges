@@ -18,6 +18,17 @@ If \code{detailed = TRUE}, returns a list with \code{summary} and \code{partitio
 \description{
 Summarize index size and partition structure.
 }
+\details{
+Use this function to inspect how the subject was partitioned internally and
+to get a rough sense of memory footprint.
+
+\code{subject_n} is the number of indexed ranges.
+
+\code{partition_n} is the number of internal partitions, usually driven by
+sequence structure.
+
+\code{index_size_mb} is the in-memory object size, not the serialized file size.
+}
 \examples{
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))
 idx <- fast_build_index(s)

@@ -15,6 +15,10 @@ A \code{fast_ranges_index} object.
 \description{
 Load a \code{fast_ranges_index} object saved with \code{fast_save_index()}.
 }
+\details{
+This function validates that the file contains the fields required by
+\code{fastRanges} before returning the object.
+}
 \examples{
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))
 idx <- fast_build_index(s)

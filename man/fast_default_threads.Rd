@@ -15,6 +15,14 @@ Returns the default thread count used by \code{fastRanges} overlap routines.
 \details{
 The default is controlled by \code{getOption("fastRanges.threads")} and falls
 back to \code{1L}.
+
+This helper is mainly useful when you want package-wide thread control
+without passing \verb{threads =} to every call.
+
+Example:
+
+\code{options(fastRanges.threads = 8L)} sets the default thread count for later
+calls that do not specify \code{threads} explicitly.
 }
 \examples{
 fast_default_threads()

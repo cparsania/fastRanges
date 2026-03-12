@@ -15,6 +15,12 @@ A \code{S4Vectors::Hits} object.
 \description{
 Materialize all overlap chunks from an iterator into a single \code{Hits} object.
 }
+\details{
+This collects only the chunks that have not yet been consumed.
+
+If you want all hits from the beginning after some chunks were already read,
+call \code{fast_iter_reset(iter)} first and then \code{fast_iter_collect(iter)}.
+}
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))

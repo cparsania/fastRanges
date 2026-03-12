@@ -18,5 +18,4 @@
 
 /.quarto/
 **/*.quarto_ipynb
-inst/benchmarks/*
 vignettes/benchmark_bioc.qmd

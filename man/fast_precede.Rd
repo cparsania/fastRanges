@@ -18,7 +18,7 @@ fast_precede(
 
 \item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
 
-\item{threads}{Integer scalar thread count.}
+\item{threads}{Integer scalar thread count. Included for API consistency.}
 }
 \value{
 Integer vector of subject indices, with \code{NA} for unmatched queries.
@@ -26,6 +26,10 @@ Integer vector of subject indices, with \code{NA} for unmatched queries.
 \description{
 Return the index of the first subject range that is strictly after each
 query range.
+}
+\details{
+For each query range, return the index of the first subject range that comes
+strictly after the query.
 }
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))

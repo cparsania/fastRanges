@@ -18,7 +18,7 @@ fast_distance_to_nearest(
 
 \item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
 
-\item{threads}{Integer scalar thread count.}
+\item{threads}{Integer scalar thread count. Included for API consistency.}
 }
 \value{
 A \code{S4Vectors::DataFrame} with \code{query_id}, \code{subject_id}, and
@@ -26,6 +26,11 @@ A \code{S4Vectors::DataFrame} with \code{query_id}, \code{subject_id}, and
 }
 \description{
 Compute nearest-neighbor mapping from query ranges to subject ranges.
+}
+\details{
+This function currently returns the same object shape as \code{fast_nearest()}.
+It is provided so users can choose the more explicit name when they care
+about the distance column.
 }
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))

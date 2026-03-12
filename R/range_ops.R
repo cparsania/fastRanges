@@ -4,8 +4,18 @@
 #'
 #' @param x An `IRanges` or `GRanges` object.
 #' @param ignore_strand Logical scalar. Ignored for non-genomic ranges.
-#' @param min_gap_width Integer scalar minimum gap width for separating ranges.
-#' @param with_revmap Logical scalar. If `TRUE`, include reverse mapping.
+#' @param min_gap_width Integer scalar controlling when nearby ranges should be
+#'   merged.
+#'
+#'   `1` merges overlapping or directly adjacent ranges.
+#'
+#'   Larger values require larger gaps before two ranges are kept separate.
+#' @param with_revmap Logical scalar. If `TRUE`, include reverse mapping from
+#'   each output range back to contributing input ranges.
+#'
+#' @details
+#' `fast_reduce()` simplifies a range set by merging runs of overlapping or
+#' near-adjacent intervals.
 #'
 #' @return An object of the same range class as `x`.
 #' @export
@@ -44,6 +54,11 @@ fast_reduce <- function(
 #' Return non-overlapping segments induced by input ranges.
 #'
 #' @inheritParams fast_reduce
+#'
+#' @details
+#' `fast_disjoin()` cuts the covered span of `x` into the smallest
+#' non-overlapping pieces.
+#'
 #' @return An object of the same range class as `x`.
 #' @export
 #'
@@ -71,7 +86,13 @@ fast_disjoin <- function(
 #'
 #' @param x An `IRanges` or `GRanges` object.
 #' @param start,end Optional integer bounds for non-genomic ranges.
+#'   These are most useful for `IRanges`. For `GRanges`, sequence lengths are
+#'   usually taken from `seqinfo(x)`.
 #' @param ignore_strand Logical scalar. Ignored for non-genomic ranges.
+#'
+#' @details
+#' `fast_gaps()` returns the regions not covered by `x` inside the requested
+#' bounds.
 #'
 #' @return An object of the same range class as `x`.
 #' @export
@@ -88,7 +109,14 @@ fast_gaps <- function(
   .assert_scalar_logical(ignore_strand, "ignore_strand")
 
   if (.is_granges(x)) {
-    return(GenomicRanges::gaps(x, start = start, end = end, ignore.strand = ignore_strand))
+    args <- list(x, ignore.strand = ignore_strand)
+    if (!is.null(start)) {
+      args$start <- start
+    }
+    if (!is.null(end)) {
+      args$end <- end
+    }
+    return(do.call(GenomicRanges::gaps, args))
   }
 
   IRanges::gaps(x, start = start, end = end)
@@ -100,6 +128,9 @@ fast_gaps <- function(
 #'
 #' @param x,y `IRanges` or `GRanges` objects of compatible class.
 #' @param ignore_strand Logical scalar. Ignored for non-genomic ranges.
+#'
+#' @details
+#' `fast_range_union()` returns the combined interval coverage of `x` and `y`.
 #'
 #' @return An object of the same range class as `x` and `y`.
 #' @export
@@ -124,6 +155,11 @@ fast_range_union <- function(x, y, ignore_strand = FALSE) {
 #' Compute range-wise intersection.
 #'
 #' @inheritParams fast_range_union
+#'
+#' @details
+#' `fast_range_intersect()` keeps only the coordinate span shared by `x` and
+#' `y`.
+#'
 #' @return An object of the same range class as `x` and `y`.
 #' @export
 #'
@@ -147,6 +183,10 @@ fast_range_intersect <- function(x, y, ignore_strand = FALSE) {
 #' Compute ranges in `x` that are not covered by `y`.
 #'
 #' @inheritParams fast_range_union
+#'
+#' @details
+#' `fast_range_setdiff()` subtracts the covered span of `y` from `x`.
+#'
 #' @return An object of the same range class as `x`.
 #' @export
 #'

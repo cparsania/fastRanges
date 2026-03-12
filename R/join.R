@@ -5,9 +5,29 @@
 #'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
-#' @param join Join mode, either `"inner"` or `"left"`.
-#' @param query_prefix Prefix applied to query column names.
-#' @param subject_prefix Prefix applied to subject column names.
+#' @param join Join mode.
+#'
+#'   `"inner"` returns one row per overlap hit and drops queries with no hit.
+#'
+#'   `"left"` keeps every query at least once. Queries with no hit get
+#'   `NA` values in subject columns.
+#' @param query_prefix Prefix added to columns derived from `query`.
+#'   This helps you see which output columns came from the query object.
+#' @param subject_prefix Prefix added to columns derived from `subject`.
+#'   This helps you see which output columns came from the subject object.
+#'
+#' @details
+#' The join family turns overlap hits into beginner-friendly tabular output.
+#'
+#' Output always starts with `query_id` and `subject_id`.
+#'
+#' `query_id` is the 1-based row index from `query`.
+#'
+#' `subject_id` is the 1-based row index from `subject`, or `NA` for unmatched
+#' queries in a left join.
+#'
+#' The remaining columns are prefixed copies of the original range columns and
+#' metadata columns.
 #'
 #' @return A `data.frame` with overlap ids and prefixed query/subject columns.
 #' @export

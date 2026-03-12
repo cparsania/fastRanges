@@ -5,6 +5,17 @@
 #'
 #' @param subject An `IRanges` or `GRanges` object.
 #'
+#' @details
+#' The index stores a sorted representation of `subject` that is optimized for
+#' repeated overlap queries.
+#'
+#' Build the index once, then pass it as `subject` to
+#' `fast_find_overlaps()`, `fast_count_overlaps()`, or other overlap-summary
+#' functions.
+#'
+#' Use the raw `subject` object, not the index, when you need subject metadata
+#' in the output table, for example with overlap joins.
+#'
 #' @return A `fast_ranges_index` object.
 #' @export
 #'

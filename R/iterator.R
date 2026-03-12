@@ -4,9 +4,29 @@
 #'
 #' @param query An `IRanges` or `GRanges` query object.
 #' @param subject An `IRanges`/`GRanges` object or a `fast_ranges_index`.
-#' @param chunk_size Integer scalar number of query ranges per chunk.
+#' @param chunk_size Integer scalar number of query ranges to process in one
+#'   iterator step.
+#'
+#'   Smaller values use less memory and give more frequent progress points.
+#'
+#'   Larger values usually improve throughput but each call to
+#'   `fast_iter_next()` does more work.
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
+#'
+#' @details
+#' Use the iterator API when `query` is large and you do not want to
+#' materialize all overlap hits in one call.
+#'
+#' Typical workflow:
+#'
+#' create the iterator with `fast_find_overlaps_iter()`
+#'
+#' inspect progress with `fast_iter_has_next()`
+#'
+#' pull one chunk with `fast_iter_next()`
+#'
+#' or collect all remaining chunks with `fast_iter_collect()`
 #'
 #' @return A `fast_ranges_iter` iterator object.
 #' @export
@@ -88,6 +108,12 @@ fast_iter_has_next <- function(iter) {
 #'
 #' @param iter A `fast_ranges_iter` object.
 #'
+#' @details
+#' Each call advances the iterator state.
+#'
+#' The returned `Hits` object uses global query indices, not chunk-local
+#' indices, so you can combine chunk outputs safely.
+#'
 #' @return A `S4Vectors::Hits` object for the next chunk, with global query
 #'   indices.
 #' @export
@@ -147,6 +173,10 @@ fast_iter_next <- function(iter) {
 #'
 #' @param iter A `fast_ranges_iter` object.
 #'
+#' @details
+#' After reset, the next call to `fast_iter_next()` starts again from the first
+#' query chunk.
+#'
 #' @return Invisibly returns `iter`.
 #' @export
 #'
@@ -166,6 +196,12 @@ fast_iter_reset <- function(iter) {
 #' Materialize all overlap chunks from an iterator into a single `Hits` object.
 #'
 #' @param iter A `fast_ranges_iter` object.
+#'
+#' @details
+#' This collects only the chunks that have not yet been consumed.
+#'
+#' If you want all hits from the beginning after some chunks were already read,
+#' call `fast_iter_reset(iter)` first and then `fast_iter_collect(iter)`.
 #'
 #' @return A `S4Vectors::Hits` object.
 #' @export

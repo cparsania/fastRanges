@@ -80,6 +80,15 @@
 #' The default is controlled by `getOption("fastRanges.threads")` and falls
 #' back to `1L`.
 #'
+#' @details
+#' This helper is mainly useful when you want package-wide thread control
+#' without passing `threads =` to every call.
+#'
+#' Example:
+#'
+#' `options(fastRanges.threads = 8L)` sets the default thread count for later
+#' calls that do not specify `threads` explicitly.
+#'
 #' @return Integer scalar thread count.
 #' @export
 #'

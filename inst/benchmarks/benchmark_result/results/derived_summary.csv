@@ -1,0 +1,9 @@
+"task","engine","median_sec","baseline_sec","speedup_vs_baseline"
+"aggregate_sum","Bioconductor_baseline",2.76200000000017,2.76200000000017,1
+"aggregate_sum","fastRanges",1.56800000000021,2.76200000000017,1.76147959183661
+"count_by_group","Bioconductor_baseline",2.63200000000006,2.63200000000006,1
+"count_by_group","fastRanges",1.59450000000061,2.63200000000006,1.65067419253626
+"self_overlaps","Bioconductor_baseline",0.663000000000011,0.663000000000011,1
+"self_overlaps","fastRanges",0.559500000000298,0.663000000000011,1.18498659517365
+"window_count","Bioconductor_baseline",2.60449999999992,2.60449999999992,1
+"window_count","fastRanges",2.07700000000023,2.60449999999992,1.25397207510815

@@ -15,6 +15,10 @@ Invisibly returns \code{iter}.
 \description{
 Reset iterator position to the first query chunk.
 }
+\details{
+After reset, the next call to \code{fast_iter_next()} starts again from the first
+query chunk.
+}
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))

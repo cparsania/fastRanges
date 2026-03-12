@@ -3,11 +3,21 @@
 #' Compute per-position coverage for input ranges.
 #'
 #' @param x An `IRanges` or `GRanges` object.
-#' @param shift Passed to `coverage()`.
-#' @param width Passed to `coverage()`.
-#' @param weight Passed to `coverage()`.
+#' @param shift Passed to `coverage()`. Use this to shift intervals before
+#'   computing coverage.
+#' @param width Passed to `coverage()`. Use this to force the output length.
+#' @param weight Passed to `coverage()`. This can be a scalar or vector and is
+#'   useful when intervals should contribute weighted counts instead of `1`.
 #' @param method Coverage method.
 #' @param threads Integer scalar thread count. Reserved for API consistency.
+#'
+#' @details
+#' Coverage answers the question: "how many ranges cover each position?"
+#'
+#' For `IRanges`, the result is one `Rle`.
+#'
+#' For `GRanges`, the result is an `RleList`, usually one coverage track per
+#' sequence level.
 #'
 #' @return `Rle` (for `IRanges`) or `RleList` (for `GRanges`).
 #' @export
@@ -39,12 +49,23 @@ fast_coverage <- function(
 #'
 #' @param x An `IRanges` or `GRanges` object.
 #' @param tile_width Integer scalar tile width.
-#' @param step_width Integer scalar step width.
+#' @param step_width Integer scalar step width. Use a value smaller than
+#'   `tile_width` for overlapping tiles and the same value for adjacent tiles.
 #' @param shift Passed to `coverage()`.
 #' @param width Passed to `coverage()`.
 #' @param weight Passed to `coverage()`.
 #' @param method Coverage method.
 #' @param threads Integer scalar thread count. Reserved for API consistency.
+#'
+#' @details
+#' `fast_tile_coverage()` converts base-resolution coverage into a simpler table
+#' of fixed-width summaries.
+#'
+#' Each row in the result is one tile.
+#'
+#' `coverage_sum` is the sum of coverage values across that tile.
+#'
+#' For `GRanges`, the output also includes `seqnames`.
 #'
 #' @return A `data.frame` with tile coordinates and `coverage_sum`.
 #' @export

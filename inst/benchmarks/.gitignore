@@ -1,0 +1,6 @@
+/.quarto/
+**/*.quarto_ipynb
+/benchmark_bioc_files/
+/*.html
+/*.knit.md
+/*_files/

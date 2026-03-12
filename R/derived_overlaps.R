@@ -10,6 +10,12 @@
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
 #'
+#' @details
+#' `fast_self_overlaps()` compares a range object to itself.
+#'
+#' This is useful when you want to know which ranges in one set overlap each
+#' other rather than overlap another object.
+#'
 #' @return A `S4Vectors::Hits` object.
 #' @export
 #'
@@ -85,6 +91,13 @@ fast_self_overlaps <- function(
 #' @inheritParams fast_self_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
 #' @param return One of `"vector"` or `"data.frame"`.
+#'
+#' @details
+#' Two ranges can end up in the same cluster even if they do not overlap
+#' directly, as long as they are linked by intermediate overlaps.
+#'
+#' Example: if range 1 overlaps range 2, and range 2 overlaps range 3, then
+#' all three belong to one cluster.
 #'
 #' @return If `return = "vector"`, an integer vector of cluster IDs with one
 #'   element per range in `x`. If `return = "data.frame"`, a `data.frame` with
@@ -195,8 +208,17 @@ fast_cluster_overlaps <- function(
 #' @param subject An `IRanges` or `GRanges` subject object.
 #' @param window_width Integer scalar window width.
 #' @param step_width Integer scalar window step.
+#'   Use a value smaller than `window_width` for sliding windows and the same
+#'   value for non-overlapping windows.
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
+#'
+#' @details
+#' Windows are generated across the span of `query`, then overlap counts are
+#' measured between those windows and `subject`.
+#'
+#' The result is a table rather than a `Hits` object because the main goal is
+#' summary, not individual hit inspection.
 #'
 #' @return A `data.frame` containing window coordinates and overlap counts.
 #' @export

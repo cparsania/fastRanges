@@ -114,3 +114,95 @@ test_that("count and any wrappers agree with overlap hits", {
   expect_equal(counts, tabulate(S4Vectors::queryHits(h), nbins = length(q)))
   expect_equal(any_hits, counts > 0L)
 })
+
+test_that("within semantics with max_gap match GenomicRanges", {
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 10L, end = 20L))
+  s <- GenomicRanges::GRanges(
+    "chr1",
+    IRanges::IRanges(
+      start = c(5L, 5L, 8L, 10L, 11L),
+      end = c(20L, 25L, 23L, 25L, 20L)
+    )
+  )
+
+  ref0 <- GenomicRanges::findOverlaps(
+    q, s,
+    type = "within",
+    maxgap = 0L,
+    minoverlap = 0L,
+    ignore.strand = FALSE
+  )
+  got0 <- fast_find_overlaps(
+    q, s,
+    type = "within",
+    max_gap = 0L,
+    min_overlap = 0L,
+    ignore_strand = FALSE,
+    threads = 2
+  )
+
+  ref5 <- GenomicRanges::findOverlaps(
+    q, s,
+    type = "within",
+    maxgap = 5L,
+    minoverlap = 0L,
+    ignore.strand = FALSE
+  )
+  got5 <- fast_find_overlaps(
+    q, s,
+    type = "within",
+    max_gap = 5L,
+    min_overlap = 0L,
+    ignore_strand = FALSE,
+    threads = 2
+  )
+
+  expect_equal(canon_hits(got0), canon_hits(ref0))
+  expect_equal(canon_hits(got5), canon_hits(ref5))
+})
+
+test_that("equal semantics with max_gap match GenomicRanges", {
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 10L, end = 20L))
+  s <- GenomicRanges::GRanges(
+    "chr1",
+    IRanges::IRanges(
+      start = c(5L, 5L, 10L, 11L, 10L),
+      end = c(20L, 21L, 25L, 20L, 20L)
+    )
+  )
+
+  ref0 <- GenomicRanges::findOverlaps(
+    q, s,
+    type = "equal",
+    maxgap = 0L,
+    minoverlap = 0L,
+    ignore.strand = FALSE
+  )
+  got0 <- fast_find_overlaps(
+    q, s,
+    type = "equal",
+    max_gap = 0L,
+    min_overlap = 0L,
+    ignore_strand = FALSE,
+    threads = 2
+  )
+
+  ref5 <- GenomicRanges::findOverlaps(
+    q, s,
+    type = "equal",
+    maxgap = 5L,
+    minoverlap = 0L,
+    ignore.strand = FALSE
+  )
+  got5 <- fast_find_overlaps(
+    q, s,
+    type = "equal",
+    max_gap = 5L,
+    min_overlap = 0L,
+    ignore_strand = FALSE,
+    threads = 2
+  )
+
+  expect_equal(canon_hits(got0), canon_hits(ref0))
+  expect_equal(canon_hits(got5), canon_hits(ref5))
+})

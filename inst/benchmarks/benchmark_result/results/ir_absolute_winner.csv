@@ -1,0 +1,7 @@
+"engine","threads","median_sec","speedup_vs_1_thread"
+"fastRanges_indexed_IRanges",1,29.9015,1
+"fastRanges_indexed_IRanges",2,38.9335000000001,0.768014691717927
+"fastRanges_indexed_IRanges",8,37.7489999999999,0.792113698376117
+"fastRanges_indexed_IRanges",32,20.9069999999999,1.4302147606065
+"fastRanges_indexed_IRanges",64,17.2815000000001,1.73026068338975
+"fastRanges_indexed_IRanges",96,15.7855,1.89423838332647

@@ -16,6 +16,12 @@ indices.
 \description{
 Compute overlaps for the next query chunk.
 }
+\details{
+Each call advances the iterator state.
+
+The returned \code{Hits} object uses global query indices, not chunk-local
+indices, so you can combine chunk outputs safely.
+}
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))

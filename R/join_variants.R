@@ -84,6 +84,14 @@ fast_left_overlap_join <- function(
 #' @inheritSection fast_find_overlaps Overlap semantics
 #' @param query_prefix Prefix applied to query columns.
 #'
+#' @details
+#' This is similar to a SQL `SEMI JOIN`.
+#'
+#' It keeps only query rows that have at least one overlap hit.
+#'
+#' `overlap_count` tells you how many subject ranges matched each retained
+#' query row.
+#'
 #' @return A `data.frame` containing matching query rows and overlap counts.
 #' @export
 #'
@@ -128,6 +136,15 @@ fast_semi_overlap_join <- function(
 #'
 #' @inheritParams fast_semi_overlap_join
 #' @inheritSection fast_find_overlaps Overlap semantics
+#'
+#' @details
+#' This is similar to a SQL `ANTI JOIN`.
+#'
+#' It keeps only query rows with zero overlap hits.
+#'
+#' `overlap_count` is always `0` in the returned table and is included to keep
+#' the result grammar parallel to `fast_semi_overlap_join()`.
+#'
 #' @return A `data.frame` containing query rows with zero overlaps.
 #' @export
 #'

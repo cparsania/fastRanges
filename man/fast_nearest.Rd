@@ -18,7 +18,7 @@ fast_nearest(
 
 \item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
 
-\item{threads}{Integer scalar thread count.}
+\item{threads}{Integer scalar thread count. Included for API consistency.}
 }
 \value{
 A \code{S4Vectors::DataFrame} with \code{query_id}, \code{subject_id}, and
@@ -26,6 +26,20 @@ A \code{S4Vectors::DataFrame} with \code{query_id}, \code{subject_id}, and
 }
 \description{
 Compute nearest-neighbor mapping from query ranges to subject ranges.
+}
+\details{
+These functions answer nearest-neighbor questions rather than overlap
+questions.
+
+\code{fast_nearest()} and \code{fast_distance_to_nearest()} return one row per matched
+query.
+
+\code{query_id} is the row index in \code{query}.
+
+\code{subject_id} is the row index of the nearest subject.
+
+\code{distance} is \code{0} when the query overlaps the subject and positive when the
+nearest subject is separated by a gap.
 }
 \examples{
 q <- IRanges::IRanges(start = c(1, 10, 20), width = c(5, 4, 3))

@@ -20,7 +20,8 @@ fast_tile_coverage(
 
 \item{tile_width}{Integer scalar tile width.}
 
-\item{step_width}{Integer scalar step width.}
+\item{step_width}{Integer scalar step width. Use a value smaller than
+\code{tile_width} for overlapping tiles and the same value for adjacent tiles.}
 
 \item{shift}{Passed to \code{coverage()}.}
 
@@ -37,6 +38,16 @@ A \code{data.frame} with tile coordinates and \code{coverage_sum}.
 }
 \description{
 Aggregate coverage into fixed-width tiles.
+}
+\details{
+\code{fast_tile_coverage()} converts base-resolution coverage into a simpler table
+of fixed-width summaries.
+
+Each row in the result is one tile.
+
+\code{coverage_sum} is the sum of coverage values across that tile.
+
+For \code{GRanges}, the output also includes \code{seqnames}.
 }
 \examples{
 x <- IRanges::IRanges(start = c(1, 4, 10), end = c(5, 8, 12))

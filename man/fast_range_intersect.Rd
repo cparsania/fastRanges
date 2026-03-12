@@ -17,6 +17,10 @@ An object of the same range class as \code{x} and \code{y}.
 \description{
 Compute range-wise intersection.
 }
+\details{
+\code{fast_range_intersect()} keeps only the coordinate span shared by \code{x} and
+\code{y}.
+}
 \examples{
 x <- IRanges::IRanges(start = c(1, 10), end = c(5, 12))
 y <- IRanges::IRanges(start = c(3, 20), end = c(8, 21))

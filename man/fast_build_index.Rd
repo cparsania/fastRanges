@@ -16,6 +16,17 @@ A \code{fast_ranges_index} object.
 Build a sorted subject index that can be reused across repeated overlap
 queries.
 }
+\details{
+The index stores a sorted representation of \code{subject} that is optimized for
+repeated overlap queries.
+
+Build the index once, then pass it as \code{subject} to
+\code{fast_find_overlaps()}, \code{fast_count_overlaps()}, or other overlap-summary
+functions.
+
+Use the raw \code{subject} object, not the index, when you need subject metadata
+in the output table, for example with overlap joins.
+}
 \examples{
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))
 idx <- fast_build_index(s)

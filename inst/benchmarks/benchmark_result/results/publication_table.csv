@@ -1,0 +1,13 @@
+"scenario","engine","median_sec","speedup_vs_genomicranges"
+"Q1,000,000 vs S5,000,000","GenomicRanges_GNCList",1.046,1.9321223709369
+"Q1,000,000 vs S5,000,000","GenomicRanges_findOverlaps",2.021,1
+"Q1,000,000 vs S5,000,000","fastRanges_direct",1.324,1.52643504531722
+"Q1,000,000 vs S5,000,000","fastRanges_indexed",0.3665,5.51432469304228
+"Q1,600,000 vs S8,000,000","GenomicRanges_GNCList",1.9905,1.9216277317257
+"Q1,600,000 vs S8,000,000","GenomicRanges_findOverlaps",3.825,1
+"Q1,600,000 vs S8,000,000","fastRanges_direct",2.532,1.51066350710901
+"Q1,600,000 vs S8,000,000","fastRanges_indexed",0.704999999999998,5.42553191489363
+"Q400,000 vs S2,000,000","GenomicRanges_GNCList",0.358499999999999,1.76011157601116
+"Q400,000 vs S2,000,000","GenomicRanges_findOverlaps",0.630999999999999,1
+"Q400,000 vs S2,000,000","fastRanges_direct",0.523499999999999,1.20534861509074
+"Q400,000 vs S2,000,000","fastRanges_indexed",0.123,5.13008130081301

@@ -6,6 +6,10 @@
 #' @param path Output file path for the serialized index.
 #' @param compress Logical scalar. If `TRUE`, uses xz compression.
 #'
+#' @details
+#' Saving an index is useful when index construction is expensive and the same
+#' subject set will be queried again in a later R session.
+#'
 #' @return Invisibly returns `path`.
 #' @export
 #'
@@ -39,6 +43,10 @@ fast_save_index <- function(index, path, compress = TRUE) {
 #' Load a `fast_ranges_index` object saved with `fast_save_index()`.
 #'
 #' @param path File path to a serialized index.
+#'
+#' @details
+#' This function validates that the file contains the fields required by
+#' `fastRanges` before returning the object.
 #'
 #' @return A `fast_ranges_index` object.
 #' @export
@@ -83,6 +91,17 @@ fast_load_index <- function(path) {
 #'
 #' @param index A `fast_ranges_index` object.
 #' @param detailed Logical scalar. If `TRUE`, returns partition-level details.
+#'
+#' @details
+#' Use this function to inspect how the subject was partitioned internally and
+#' to get a rough sense of memory footprint.
+#'
+#' `subject_n` is the number of indexed ranges.
+#'
+#' `partition_n` is the number of internal partitions, usually driven by
+#' sequence structure.
+#'
+#' `index_size_mb` is the in-memory object size, not the serialized file size.
 #'
 #' @return By default, a one-row `S4Vectors::DataFrame` with summary fields.
 #'   If `detailed = TRUE`, returns a list with `summary` and `partitions`.

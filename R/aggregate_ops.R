@@ -8,8 +8,17 @@
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
 #' @param group_col Subject metadata column name used for grouping.
+#'   This must be present in `mcols(subject)`.
 #' @param include_na_group Logical scalar. If `TRUE`, missing group values are
-#'   counted as `"<NA>"`.
+#'   counted as `"<NA>"` instead of being dropped.
+#'
+#' @details
+#' This function answers the question: "for each query, how many overlaps came
+#' from each subject group?"
+#'
+#' Rows correspond to query ranges.
+#'
+#' Columns correspond to distinct values in `mcols(subject)[[group_col]]`.
 #'
 #' @return Integer matrix with one row per query and one column per group.
 #' @export
@@ -101,10 +110,23 @@ fast_count_overlaps_by_group <- function(
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
 #' @param value_col Subject metadata column name containing numeric values.
+#'   This is required unless `fun = "count"`.
 #' @param fun Aggregation function: one of `"count"`, `"sum"`, `"mean"`,
 #'   `"min"`, or `"max"`.
 #' @param na_rm Logical scalar. If `TRUE`, remove missing values in
 #'   aggregation.
+#'
+#' @details
+#' This function summarizes subject metadata over the overlap hits of each
+#' query.
+#'
+#' Examples:
+#'
+#' use `fun = "count"` to count overlaps
+#'
+#' use `fun = "sum"` to sum a signal column over matched subjects
+#'
+#' use `fun = "mean"` to compute average matched score per query
 #'
 #' @return Numeric vector with one value per query.
 #' @export

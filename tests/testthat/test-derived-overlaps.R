@@ -83,3 +83,17 @@ test_that("index save/load/stats round-trip works", {
   detailed <- fast_index_stats(idx2, detailed = TRUE)
   expect_true(all(c("summary", "partitions") %in% names(detailed)))
 })
+
+test_that("fast_gaps matches GenomicRanges when GRanges bounds are implicit", {
+  x <- GenomicRanges::GRanges(
+    seqnames = c("chr1", "chr1", "chr2"),
+    ranges = IRanges::IRanges(start = c(1L, 5L, 10L), end = c(3L, 8L, 12L)),
+    strand = c("+", "+", "*")
+  )
+  seqlengths(x) <- c(chr1 = 20L, chr2 = 20L)
+
+  expect_equal(
+    fast_gaps(x, ignore_strand = TRUE),
+    GenomicRanges::gaps(x, ignore.strand = TRUE)
+  )
+})

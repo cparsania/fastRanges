@@ -53,6 +53,21 @@ NULL
 #' @template overlap_shared_args
 #' @template overlap_type_details
 #'
+#' @details
+#' This is the core matching function in `fastRanges`.
+#'
+#' Think of it as answering the question: "for each query range, which subject
+#' ranges satisfy my overlap rule?"
+#'
+#' The return value is a `Hits` object. The important pieces are:
+#'
+#' `queryHits(h)` gives the row numbers from `query`.
+#'
+#' `subjectHits(h)` gives the matching row numbers from `subject`.
+#'
+#' If you need only counts or a yes/no answer, prefer `fast_count_overlaps()`
+#' or `fast_overlaps_any()`, because they return simpler summaries.
+#'
 #' @return A `S4Vectors::Hits` object.
 #' @export
 #'
@@ -117,6 +132,15 @@ fast_find_overlaps <- function(
 #'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
+#'
+#' @details
+#' Returns one integer per query range.
+#'
+#' A value of `0` means that query had no matching subjects.
+#'
+#' A value of `5` means that query matched five subject ranges under the chosen
+#' overlap rule.
+#'
 #' @return Integer vector with one element per query range.
 #' @export
 #'
@@ -172,6 +196,14 @@ fast_count_overlaps <- function(
 #'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
+#'
+#' @details
+#' Returns one logical value per query range.
+#'
+#' `TRUE` means at least one subject range matched.
+#'
+#' `FALSE` means no subject range matched.
+#'
 #' @return Logical vector with one element per query range.
 #' @export
 #'

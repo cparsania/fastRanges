@@ -64,9 +64,19 @@ inline bool interval_match(const int q_start,
     if (max_gap < 0) return q_end == s_end;
     return std::abs(q_end - s_end) <= max_gap;
   case 3:
-    return q_start >= s_start && q_end <= s_end;
+    if (!(q_start >= s_start && q_end <= s_end)) {
+      return false;
+    }
+    if (max_gap <= 0) {
+      return true;
+    }
+    return (s_end - s_start) - (q_end - q_start) <= max_gap;
   case 4:
-    return q_start == s_start && q_end == s_end;
+    if (max_gap < 0) {
+      return q_start == s_start && q_end == s_end;
+    }
+    return std::abs(q_start - s_start) <= max_gap &&
+      std::abs(q_end - s_end) <= max_gap;
   default:
     return false;
   }

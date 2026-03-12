@@ -17,6 +17,9 @@ An object of the same range class as \code{x}.
 \description{
 Compute ranges in \code{x} that are not covered by \code{y}.
 }
+\details{
+\code{fast_range_setdiff()} subtracts the covered span of \code{y} from \code{x}.
+}
 \examples{
 x <- IRanges::IRanges(start = c(1, 10), end = c(5, 12))
 y <- IRanges::IRanges(start = c(3, 20), end = c(8, 21))

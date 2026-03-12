@@ -11,13 +11,18 @@ fast_disjoin(x, ignore_strand = FALSE, with_revmap = FALSE)
 
 \item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
 
-\item{with_revmap}{Logical scalar. If \code{TRUE}, include reverse mapping.}
+\item{with_revmap}{Logical scalar. If \code{TRUE}, include reverse mapping from
+each output range back to contributing input ranges.}
 }
 \value{
 An object of the same range class as \code{x}.
 }
 \description{
 Return non-overlapping segments induced by input ranges.
+}
+\details{
+\code{fast_disjoin()} cuts the covered span of \code{x} into the smallest
+non-overlapping pieces.
 }
 \examples{
 x <- IRanges::IRanges(start = c(1, 4, 10), end = c(5, 8, 12))

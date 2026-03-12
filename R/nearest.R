@@ -5,7 +5,21 @@
 #' @param query An `IRanges` or `GRanges` query object.
 #' @param subject An `IRanges` or `GRanges` subject object.
 #' @param ignore_strand Logical scalar. Ignored for non-genomic ranges.
-#' @param threads Integer scalar thread count.
+#' @param threads Integer scalar thread count. Included for API consistency.
+#'
+#' @details
+#' These functions answer nearest-neighbor questions rather than overlap
+#' questions.
+#'
+#' `fast_nearest()` and `fast_distance_to_nearest()` return one row per matched
+#' query.
+#'
+#' `query_id` is the row index in `query`.
+#'
+#' `subject_id` is the row index of the nearest subject.
+#'
+#' `distance` is `0` when the query overlaps the subject and positive when the
+#' nearest subject is separated by a gap.
 #'
 #' @return A `S4Vectors::DataFrame` with `query_id`, `subject_id`, and
 #'   `distance` columns.
@@ -33,6 +47,12 @@ fast_nearest <- function(
 #' Compute nearest-neighbor mapping from query ranges to subject ranges.
 #'
 #' @inheritParams fast_nearest
+#'
+#' @details
+#' This function currently returns the same object shape as `fast_nearest()`.
+#' It is provided so users can choose the more explicit name when they care
+#' about the distance column.
+#'
 #' @return A `S4Vectors::DataFrame` with `query_id`, `subject_id`, and
 #'   `distance` columns.
 #' @export
@@ -70,6 +90,11 @@ fast_distance_to_nearest <- function(
 #' query range.
 #'
 #' @inheritParams fast_nearest
+#'
+#' @details
+#' For each query range, return the index of the first subject range that comes
+#' strictly after the query.
+#'
 #' @return Integer vector of subject indices, with `NA` for unmatched queries.
 #' @export
 #'
@@ -99,6 +124,11 @@ fast_precede <- function(
 #' query range.
 #'
 #' @inheritParams fast_nearest
+#'
+#' @details
+#' For each query range, return the index of the first subject range that comes
+#' strictly before the query.
+#'
 #' @return Integer vector of subject indices, with `NA` for unmatched queries.
 #' @export
 #'

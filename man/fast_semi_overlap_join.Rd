@@ -23,32 +23,69 @@ fast_semi_overlap_join(
 Use \code{fast_build_index(subject)} when the same subject is reused across
 many overlap queries.}
 
-\item{max_gap}{Integer scalar maximum allowed gap between query and subject.
-A value of \code{-1} requires direct overlap according to \code{type}. Values
-\verb{>= 0} allow near matches separated by up to \code{max_gap} bases.}
+\item{max_gap}{Integer scalar controlling how far apart two ranges may be
+and still count as a hit.
 
-\item{min_overlap}{Integer scalar minimum overlap width (in bases) required
-for a hit. Larger values are stricter.}
+Use \code{-1} to require a true overlap.
 
-\item{type}{Overlap mode:
-\code{"any"}: any qualifying overlap (or gap-constrained hit when
-\code{max_gap >= 0});
-\code{"start"}: matching start coordinates;
-\code{"end"}: matching end coordinates;
-\code{"within"}: query fully contained in subject;
-\code{"equal"}: query and subject have identical start and end.}
+Use \code{0} to allow touching ranges for \code{"any"} and to keep Bioconductor's
+default tolerance behavior for the other overlap modes.
 
-\item{ignore_strand}{Logical scalar. For \code{GRanges}, if \code{FALSE}, comparisons
-follow strand-aware Bioconductor semantics. Ignored for non-genomic
-ranges.}
+Use positive values when you want "nearby" ranges to count as matches even
+if they do not overlap directly.
 
-\item{threads}{Integer scalar thread count. For repeated-query workloads,
-prefer \code{fast_build_index(subject)} and tune \code{threads} empirically for your
-hardware (scaling can plateau at high core counts).}
+Units are bases. The meaning is intentionally aligned with
+\code{IRanges::findOverlaps()} / \code{GenomicRanges::findOverlaps()}.}
 
-\item{deterministic}{Logical scalar. If \code{TRUE}, output is sorted by
-\verb{(query_id, subject_id)}, giving stable ordering across thread counts.
-If \code{FALSE}, output order is unspecified and throughput is typically higher.}
+\item{min_overlap}{Integer scalar minimum overlap width, in bases.
+
+\code{0} is the least strict setting.
+
+Larger values require wider shared overlap and therefore return fewer hits.
+
+This argument matters only when the selected \code{type} allows an actual
+overlap width to be measured.}
+
+\item{type}{Character scalar describing what "match" means.
+
+\code{"any"} matches any overlap that satisfies \code{max_gap} / \code{min_overlap}.
+
+\code{"start"} matches ranges with compatible start coordinates.
+
+\code{"end"} matches ranges with compatible end coordinates.
+
+\code{"within"} matches queries contained inside subjects.
+
+\code{"equal"} matches queries and subjects with the same interval, or with
+start/end differences no larger than \code{max_gap} when tolerance is allowed.}
+
+\item{ignore_strand}{Logical scalar controlling strand handling for genomic
+ranges.
+
+For \code{GRanges}, \code{FALSE} means \code{"+"}, \code{"-"}, and \code{"*"} are interpreted
+using standard Bioconductor strand rules.
+
+\code{TRUE} means strand is ignored and only genomic coordinates are compared.
+
+For \code{IRanges}, this argument has no effect because there is no strand.}
+
+\item{threads}{Integer scalar number of worker threads to use.
+
+Use \code{1} for the most conservative behavior and easiest debugging.
+
+Use larger values on multicore machines when throughput matters.
+
+For repeated-query workloads, combine a prebuilt index from
+\code{fast_build_index(subject)} with a thread count chosen empirically on your
+hardware.}
+
+\item{deterministic}{Logical scalar controlling output order.
+
+\code{TRUE} returns a stable order, which is useful for testing, reproducible
+reports, and direct comparison across thread counts.
+
+\code{FALSE} allows the implementation to return hits in an unspecified order,
+which can be slightly faster for large jobs.}
 
 \item{query_prefix}{Prefix applied to query columns.}
 }
@@ -58,7 +95,18 @@ A \code{data.frame} containing matching query rows and overlap counts.
 \description{
 Return query rows that overlap at least one subject range.
 }
+\details{
+This is similar to a SQL \verb{SEMI JOIN}.
+
+It keeps only query rows that have at least one overlap hit.
+
+\code{overlap_count} tells you how many subject ranges matched each retained
+query row.
+}
 \section{Overlap semantics}{
+
+\code{query} is the range set you ask about. \code{subject} is the range set you
+compare it against.
 
 Core interval semantics (ASCII schematic):
 
@@ -89,6 +137,19 @@ query  : |------|      |------| : subject
 
 The middle distance is the gap. A hit is allowed when this distance is
 \verb{<= max_gap} (for \code{max_gap >= 0}), and overlap width is \verb{>= min_overlap}.
+
+Beginner-friendly interpretation:
+
+\code{type = "any"} asks "do these ranges touch or overlap closely enough to
+count?"
+
+\code{type = "start"} and \code{type = "end"} are useful when interval boundaries are
+biologically meaningful, for example transcription start or end sites.
+
+\code{type = "within"} asks whether each query lies inside a subject interval.
+
+\code{type = "equal"} asks whether query and subject describe the same interval,
+optionally with endpoint tolerance when \code{max_gap >= 0}.
 
 This argument grammar is intentionally aligned with Bioconductor overlap
 APIs (\code{IRanges} / \code{GenomicRanges}).

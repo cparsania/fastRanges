@@ -9,7 +9,9 @@ fast_gaps(x, start = NULL, end = NULL, ignore_strand = FALSE)
 \arguments{
 \item{x}{An \code{IRanges} or \code{GRanges} object.}
 
-\item{start, end}{Optional integer bounds for non-genomic ranges.}
+\item{start, end}{Optional integer bounds for non-genomic ranges.
+These are most useful for \code{IRanges}. For \code{GRanges}, sequence lengths are
+usually taken from \code{seqinfo(x)}.}
 
 \item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
 }
@@ -18,6 +20,10 @@ An object of the same range class as \code{x}.
 }
 \description{
 Compute uncovered regions between ranges.
+}
+\details{
+\code{fast_gaps()} returns the regions not covered by \code{x} inside the requested
+bounds.
 }
 \examples{
 x <- IRanges::IRanges(start = c(1, 4, 10), end = c(5, 8, 12))

@@ -11,15 +11,25 @@ fast_reduce(x, ignore_strand = FALSE, min_gap_width = 1L, with_revmap = FALSE)
 
 \item{ignore_strand}{Logical scalar. Ignored for non-genomic ranges.}
 
-\item{min_gap_width}{Integer scalar minimum gap width for separating ranges.}
+\item{min_gap_width}{Integer scalar controlling when nearby ranges should be
+merged.
 
-\item{with_revmap}{Logical scalar. If \code{TRUE}, include reverse mapping.}
+\code{1} merges overlapping or directly adjacent ranges.
+
+Larger values require larger gaps before two ranges are kept separate.}
+
+\item{with_revmap}{Logical scalar. If \code{TRUE}, include reverse mapping from
+each output range back to contributing input ranges.}
 }
 \value{
 An object of the same range class as \code{x}.
 }
 \description{
 Merge overlapping or adjacent ranges.
+}
+\details{
+\code{fast_reduce()} simplifies a range set by merging runs of overlapping or
+near-adjacent intervals.
 }
 \examples{
 x <- IRanges::IRanges(start = c(1, 4, 10), end = c(5, 8, 12))

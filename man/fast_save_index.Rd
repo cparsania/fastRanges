@@ -19,6 +19,10 @@ Invisibly returns \code{path}.
 \description{
 Save a \code{fast_ranges_index} object to disk for reuse across sessions.
 }
+\details{
+Saving an index is useful when index construction is expensive and the same
+subject set will be queried again in a later R session.
+}
 \examples{
 s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))
 idx <- fast_build_index(s)
