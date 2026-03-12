@@ -192,13 +192,27 @@ sum_score <- fast_overlap_aggregate(query, subject, value_col = "score", fun = "
 
 ## Benchmarking
 
-For publication-scale benchmarking, see:
+For benchmarking and result interpretation, use the following entry points:
 
-- [Benchmark Guide](inst/benchmarks/README.md)
-- [benchmark_bioc.qmd](inst/benchmarks/benchmark_bioc.qmd)
+- [Benchmark Summary](inst/benchmarks/README.md)
+- [Benchmark Runner](inst/benchmarks/benchmark_bioc.qmd)
+- [Benchmark Interpretation Report](inst/benchmarks/benchmark_result_interpretation.qmd)
+
+Recommended workflow:
+
+1. Run the large benchmark on the target machine with `benchmark_bioc.qmd`.
+2. Review the GitHub-friendly benchmark summary in `inst/benchmarks/README.md`.
+3. Render `benchmark_result_interpretation.qmd` for figure-rich post hoc
+   analysis from saved result tables.
 
 Render with:
 
 ```bash
 quarto render inst/benchmarks/benchmark_bioc.qmd -P max_threads:96
+```
+
+Interpret saved results with:
+
+```bash
+quarto render inst/benchmarks/benchmark_result_interpretation.qmd
 ```
