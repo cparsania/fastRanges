@@ -166,6 +166,8 @@ theme_pub <- function() {
 engine_palette <- c(
   "fastRanges_indexed" = "#00798C",
   "fastRanges_direct" = "#D1495B",
+  "fastRanges_indexed_GRanges" = "#00798C",
+  "fastRanges_direct_GRanges" = "#D1495B",
   "GenomicRanges_findOverlaps" = "#6C757D",
   "GenomicRanges_GNCList" = "#EDAe49",
   "fastRanges_index_reuse" = "#00798C",
@@ -180,6 +182,8 @@ engine_levels <- c(
   "GenomicRanges_GNCList",
   "fastRanges_direct",
   "fastRanges_indexed",
+  "fastRanges_direct_GRanges",
+  "fastRanges_indexed_GRanges",
   "GenomicRanges_findOverlaps",
   "GenomicRanges_GNCList",
   "fastRanges_direct",
@@ -203,9 +207,12 @@ thread_palette <- c(
 fast_color <- unname(engine_palette[["fastRanges"]])
 
 meta <- read_tbl("benchmark_run_metadata")
+package_versions <- read_tbl("package_versions")
 gr_raw <- read_tbl("gr_bench_raw")
 gr_summary <- read_tbl("gr_summary")
 gr_speedup <- read_tbl("gr_speedup")
+gr_scaling_raw <- read_tbl("gr_scaling_raw")
+gr_scaling_summary <- read_tbl("gr_scaling_summary")
 ir_raw <- read_tbl("ir_scaling_raw")
 ir_summary <- read_tbl("ir_scaling_summary")
 ir_winner <- read_tbl("ir_absolute_winner")
@@ -217,6 +224,14 @@ publication_table <- read_tbl("publication_table")
 
 gr_stats <- summarise_runtime(gr_raw, c("scenario", "query_n", "subject_n", "engine")) %>%
   add_speedup_vs_baseline(c("scenario", "query_n", "subject_n"), "engine", "GenomicRanges_findOverlaps")
+
+gr_scaling_stats <- summarise_runtime(gr_scaling_raw, c("engine", "threads")) %>%
+  add_speedup_vs_one_thread("engine") %>%
+  left_join(
+    gr_scaling_summary %>%
+      select(engine, threads, speedup_vs_genomicranges),
+    by = c("engine", "threads")
+  )
 
 repeat_stats <- summarise_runtime(repeat_raw, c("engine")) %>%
   add_speedup_vs_baseline(character(), "engine", "GenomicRanges_findOverlaps")
@@ -234,16 +249,22 @@ The benchmark represented here used `r meta$iterations[1]` timing iterations,
 thread grid `r meta$thread_grid[1]`, and up to
 `r meta$max_threads_used[1]` physical cores.
 
+## Software Versions
+
+```{r software-versions}
+package_versions
+```
+
 ## Result Inventory
 
 ```{r inventory}
 data.frame(
   table = c(
-    "gr_summary", "gr_speedup", "ir_scaling_summary",
+    "gr_summary", "gr_speedup", "gr_scaling_summary", "ir_scaling_summary",
     "repeat_bench_summary", "derived_summary", "publication_table"
   ),
   rows = c(
-    nrow(gr_summary), nrow(gr_speedup), nrow(ir_summary),
+    nrow(gr_summary), nrow(gr_speedup), nrow(gr_scaling_summary), nrow(ir_summary),
     nrow(repeat_summary), nrow(derived_summary), nrow(publication_table)
   )
 )
@@ -439,6 +460,96 @@ as a stable summary. A few wider bars in direct mode reflect occasional
 index-building overhead or memory-system variation. That pattern reinforces the
 design rationale for separate indexed and direct modes: one is for convenience,
 the other is for repeated high-throughput execution.
+
+## GRanges Thread Scaling on a Denser Workload
+
+This section interprets the additional GRanges scaling workload added to the
+main benchmark. Unlike the broad end-to-end scenarios above, this design uses a
+smaller coordinate span and fewer chromosomes, which increases overlap density
+and makes traversal cost more visible.
+
+### Absolute runtime versus thread count
+
+```{r gr-scaling-runtime, fig.width=10, fig.height=5}
+gr_scaling_fast <- gr_scaling_stats %>% filter(grepl("^fastRanges", engine))
+gr_scaling_serial <- gr_scaling_stats %>% filter(grepl("^GenomicRanges", engine))
+
+p_gr_scaling_runtime <- ggplot(gr_scaling_fast, aes(x = threads, y = median_sec, color = engine)) +
+  geom_errorbar(aes(ymin = q25_sec, ymax = q75_sec), width = 1.5, linewidth = 0.7) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 3) +
+  geom_hline(
+    data = gr_scaling_serial,
+    aes(yintercept = median_sec, color = engine),
+    linetype = 2,
+    linewidth = 0.9
+  ) +
+  geom_point(
+    data = gr_scaling_serial,
+    aes(x = threads, y = median_sec, color = engine),
+    size = 3
+  ) +
+  scale_color_manual(values = engine_palette) +
+  scale_x_continuous(breaks = sort(unique(gr_scaling_stats$threads))) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "GRanges thread scaling on a denser workload",
+    subtitle = "GenomicRanges baselines are serial reference lines",
+    x = "Threads",
+    y = "Median runtime (sec)",
+    color = "Engine"
+  ) +
+  theme_pub()
+
+p_gr_scaling_runtime
+save_plot(p_gr_scaling_runtime, "interpret_gr_scaling_runtime.png", width = 10, height = 5)
+```
+
+Interpretation:
+
+This plot separates two effects that were blended in the end-to-end GRanges
+scenarios. `fastRanges_direct_GRanges` shows the gain from the current overlap
+kernel with no prebuilt index reuse. `fastRanges_indexed_GRanges` shows the
+additional advantage of reusing subject organization across calls. The serial
+GenomicRanges reference lines remain well above the indexed `fastRanges`
+trajectory, so the dense workload does not overturn the main ranking.
+
+### Speedup versus one thread
+
+```{r gr-scaling-speedup, fig.width=10, fig.height=5}
+p_gr_scaling_speedup <- ggplot(
+  gr_scaling_fast,
+  aes(x = threads, y = speedup_vs_1_thread, color = engine)
+) +
+  geom_errorbar(aes(ymin = speedup_low, ymax = speedup_high), width = 1.5, linewidth = 0.7) +
+  geom_hline(yintercept = 1, linetype = 2, color = "grey40") +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 3) +
+  scale_color_manual(values = engine_palette) +
+  scale_x_continuous(breaks = sort(unique(gr_scaling_fast$threads))) +
+  labs(
+    title = "GRanges speedup versus 1 thread",
+    subtitle = "Dense scaling workload",
+    x = "Threads",
+    y = "Speedup vs 1 thread (x)",
+    color = "Engine"
+  ) +
+  theme_pub()
+
+p_gr_scaling_speedup
+save_plot(p_gr_scaling_speedup, "interpret_gr_scaling_speedup.png", width = 10, height = 5)
+```
+
+Interpretation:
+
+The dense GRanges scaling panel answers a question the older benchmark could
+not: how much of the GRanges gain is from threading once the workload becomes
+overlap-rich? The indexed path reaches about
+`r sprintf('%.2f', max(gr_scaling_fast$speedup_vs_1_thread[gr_scaling_fast$engine == "fastRanges_indexed_GRanges"], na.rm = TRUE))`x
+relative to its own 1-thread baseline, while the direct path also improves but
+remains slower. That supports a cleaner manuscript claim: `fastRanges` is not
+only faster in absolute GRanges runtime, it also benefits from thread scaling
+when overlap density is sufficiently high.
 
 ## Repeated-Query Workload
 
@@ -799,18 +910,6 @@ That is a coherent performance story rather than a mixed result.
    aggregation, and windowed summaries, which strengthens the case for using
    `fastRanges` as a workflow package rather than only a kernel replacement.
 
-### Recommended wording for a manuscript-style conclusion
-
-The saved benchmark results indicate that `fastRanges` provides consistent
-throughput improvements over Bioconductor baselines for large interval
-workloads. The largest gains are observed when the same subject annotation is
-reused across many queries, where explicit indexing reduces repeated overhead
-and yields multi-fold speedups. On large `IRanges` workloads, indexed
-`fastRanges` also achieves the lowest absolute runtime across the tested thread
-grid. Importantly, these gains persist beyond raw overlap search into derived
-operations such as grouped counting, aggregation, and window-based summaries,
-supporting the use of `fastRanges` as a high-throughput interval engine for
-practical genomic analysis.
 
 ## Figure Outputs
 

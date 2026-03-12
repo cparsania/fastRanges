@@ -1,5 +1,5 @@
 "engine","median_sec","baseline_sec","speedup_vs_genomicranges"
-"GenomicRanges_GNCList",15.0690000000004,26.893,1.78465724334722
-"GenomicRanges_findOverlaps",26.893,26.893,1
-"fastRanges_direct",17.7494999999999,26.893,1.51514127158513
-"fastRanges_index_reuse",5.20299999999997,26.893,5.16874879876997
+"GenomicRanges_GNCList",15.5189999999998,26.971,1.73793414524134
+"GenomicRanges_findOverlaps",26.971,26.971,1
+"fastRanges_direct",18.4720000000002,26.971,1.46010177566044
+"fastRanges_index_reuse",5.50199999999995,26.971,4.90203562340971

@@ -1,2 +1,2 @@
-"run_timestamp","seed","iterations","max_threads_requested","max_threads_used","thread_grid","available_physical_cores"
-"2026-03-12 14:51:52.333721",42,4,96,96,"1,2,8,32,64,96",96
+"run_timestamp","seed","iterations","max_threads_requested","max_threads_used","thread_grid","available_physical_cores","r_version","platform","sysname","release","machine"
+"2026-03-13 00:15:29.836617",42,3,96,96,"1,2,8,32,64,96",96,"R version 4.5.2 (2025-10-31)","x86_64-pc-linux-gnu","Linux","6.8.0-100-generic","x86_64"

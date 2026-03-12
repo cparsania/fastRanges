@@ -12,11 +12,15 @@ The figures below were generated from the saved tables in
 
 ## Benchmark Context
 
-- Run timestamp: `2026-03-12 14:51:52`
-- Iterations per benchmark point: `4`
+- Run timestamp: `2026-03-13 00:15:29`
+- Iterations per benchmark point: `3`
 - Maximum threads used: `96`
 - Thread grid: `1, 2, 8, 32, 64, 96`
 - Available physical cores: `96`
+- R version: `4.5.2`
+- fastRanges version: `0.99.0`
+- GenomicRanges version: `1.60.0`
+- IRanges version: `2.44.0`
 
 These benchmarks were designed to answer four practical questions:
 
@@ -30,16 +34,18 @@ These benchmarks were designed to answer four practical questions:
 1. `fastRanges_indexed` was the fastest engine in every saved `GRanges`
    scenario.
 2. Across the saved `GRanges` workloads, indexed `fastRanges` delivered about
-   `5.13x` to `5.51x` speedup relative to plain
+   `5.19x` to `5.40x` speedup relative to plain
    `GenomicRanges::findOverlaps()`.
 3. `fastRanges_direct` was also faster than the plain GenomicRanges baseline,
-   but its gains were smaller, about `1.21x` to `1.53x`.
+   but its gains were smaller, about `1.20x` to `1.44x`.
 4. For repeated-query workloads, `fastRanges_index_reuse` achieved about
-   `5.17x` speedup over `GenomicRanges::findOverlaps()`.
+   `4.90x` speedup over `GenomicRanges::findOverlaps()`.
 5. On the large `IRanges` workload, indexed `fastRanges` had the best absolute
    runtime at every tested thread count.
-6. Derived APIs such as grouped counting and overlap aggregation also remained
-   faster than Bioconductor baselines, with speedups up to about `1.76x`.
+6. On the denser `GRanges` scaling workload, indexed `fastRanges` reached about
+   `1.71x` speedup versus its own 1-thread baseline at `96` threads.
+7. Derived APIs such as grouped counting and overlap aggregation also remained
+   faster than Bioconductor baselines, with speedups up to about `1.71x`.
 
 ## GRanges End-to-End Runtime
 
@@ -74,6 +80,29 @@ Interpretation:
 - The best overall result came from combining reuse-friendly indexing with the
   `fastRanges` engine.
 
+## GRanges Thread Scaling on a Denser Workload
+
+The updated benchmark now includes a denser `GRanges` scaling design. This is
+important because the original end-to-end `GRanges` panel mainly answered
+"which engine is fastest?" but did not isolate how much extra threading helps
+once overlap density increases.
+
+![](benchmark_result/figures_interpretation/interpret_gr_scaling_runtime.png)
+
+![](benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png)
+
+Interpretation:
+
+- `fastRanges_direct_GRanges` shows the gain from the current overlap kernel
+  without subject index reuse.
+- `fastRanges_indexed_GRanges` shows the additional benefit of reusing the
+  subject index.
+- On this denser workload, indexed `fastRanges` reached about `1.71x` speedup
+  versus its own 1-thread runtime at `96` threads.
+- The serial `GenomicRanges` baselines remained above the indexed
+  `fastRanges` trajectory throughout, so the faster absolute result is not
+  limited to sparse workloads.
+
 ## Repeated-Query Workloads
 
 This is one of the most important practical use cases in genomics: the same
@@ -87,9 +116,9 @@ resamples.
 Interpretation:
 
 - `fastRanges_index_reuse` completed the repeated-query workload in about
-  `5.20` seconds.
-- Plain `GenomicRanges::findOverlaps()` required about `26.89` seconds.
-- This corresponds to about `5.17x` speedup versus the plain baseline.
+  `5.50` seconds.
+- Plain `GenomicRanges::findOverlaps()` required about `26.97` seconds.
+- This corresponds to about `4.90x` speedup versus the plain baseline.
 - The repeated-query benchmark is the clearest justification for using
   `fast_build_index(subject)` in production workflows.
 
@@ -107,9 +136,9 @@ Interpretation:
 - `IRanges_nthread` scaled more smoothly at low thread counts.
 - `fastRanges_indexed_IRanges` started from a much faster serial baseline and
   remained the absolute winner at every tested thread count.
-- The best stored runtime was about `15.79` seconds for indexed `fastRanges`
+- The best stored runtime was about `16.01` seconds for indexed `fastRanges`
   at `96` threads.
-- The best stored `IRanges_nthread` runtime was about `101.85` seconds, also
+- The best stored `IRanges_nthread` runtime was about `98.71` seconds, also
   at `96` threads.
 - That means the key practical result is not only scaling behavior, but the
   much lower absolute runtime of the indexed `fastRanges` path.
@@ -128,12 +157,12 @@ Interpretation:
 - `fastRanges` remained faster than Bioconductor baselines for all stored
   derived tasks.
 - Approximate speedups were:
-  - `aggregate_sum`: `1.76x`
-  - `count_by_group`: `1.65x`
-  - `self_overlaps`: `1.18x`
-  - `window_count`: `1.25x`
+  - `aggregate_sum`: `1.71x`
+  - `count_by_group`: `1.47x`
+  - `self_overlaps`: `1.27x`
+  - `window_count`: `1.20x`
 - This supports the claim that performance gains are retained in workflow-level
-  summaries, not only in raw overlap detection.
+  summaries rather than appearing only in raw overlap search.
 
 ## Recommended Usage Based on These Results
 
@@ -156,6 +185,7 @@ workflow engine rather than only as a faster replacement for one overlap call.
 ## Reproducibility
 
 - Saved result tables: `inst/benchmarks/benchmark_result/results`
+- Saved software versions: `inst/benchmarks/benchmark_result/results/package_versions.csv`
 - Full interpretation report:
   `inst/benchmarks/benchmark_result_interpretation.qmd`
 - Main benchmark runner:

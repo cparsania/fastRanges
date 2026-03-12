@@ -21,6 +21,9 @@ params:
   thread_grid: [2, 8, 32, 64, 96]
   gr_subject_sizes: [2000000, 5000000, 8000000]
   gr_query_ratio: 0.20
+  gr_scaling_subject_n: 5000000
+  gr_scaling_query_n: 1000000
+  gr_scaling_coord_span: 40000000
   repeated_queries: 8
   repeated_subject_n: 8000000
   repeated_query_n: 1000000
@@ -94,10 +97,17 @@ write_result_table <- function(tbl, name) {
   path
 }
 
-simulate_granges <- function(n, seed, seqlevels = paste0("chr", 1:22)) {
+simulate_granges <- function(
+  n,
+  seed,
+  seqlevels = paste0("chr", 1:22),
+  coord_span = 250000000L,
+  width_max = 1000L,
+  width_offset = 49L
+) {
   set.seed(seed)
-  starts <- sample.int(250000000L, n, replace = TRUE)
-  widths <- sample.int(1000L, n, replace = TRUE) + 49L
+  starts <- sample.int(as.integer(coord_span), n, replace = TRUE)
+  widths <- sample.int(as.integer(width_max), n, replace = TRUE) + as.integer(width_offset)
   GRanges(
     seqnames = sample(seqlevels, n, replace = TRUE),
     ranges = IRanges(start = starts, width = widths),
@@ -112,7 +122,7 @@ simulate_iranges <- function(n, seed) {
   IRanges(start = starts, width = widths)
 }
 
-time_engine <- function(engine, fn, iterations = 3L) {
+time_engine <- function(engine, fn, iterations = 3L, size_fn = length) {
   out <- vector("list", iterations)
   for (i in seq_len(iterations)) {
     gc(verbose = FALSE)
@@ -124,7 +134,7 @@ time_engine <- function(engine, fn, iterations = 3L) {
       engine = engine,
       iteration = i,
       elapsed_sec = as.numeric(elapsed),
-      hits = length(h),
+      hits = as.numeric(size_fn(h)),
       stringsAsFactors = FALSE
     )
   }
@@ -149,6 +159,17 @@ time_task <- function(task, engine, fn, size_fn = length, iterations = 3L) {
     )
   }
   dplyr::bind_rows(out)
+}
+
+normalize_hit_pairs <- function(h) {
+  pairs <- cbind(
+    query = S4Vectors::queryHits(h),
+    subject = S4Vectors::subjectHits(h)
+  )
+  if (nrow(pairs) == 0L) {
+    return(pairs)
+  }
+  pairs[order(pairs[, "query"], pairs[, "subject"]), , drop = FALSE]
 }
 
 theme_pub <- function() {
@@ -293,6 +314,192 @@ p_gr_speedup <- ggplot(
 p_gr_speedup
 
 ggsave(file.path(fig_dir, "granges_speedup_line.png"), p_gr_speedup, width = 10, height = 5, dpi = 300)
+```
+
+## GRanges Thread Scaling on a Denser Workload
+
+```{r granges-scaling}
+gr_scaling_subject <- simulate_granges(
+  as.integer(params$gr_scaling_subject_n),
+  seed = params$seed + 1500L,
+  seqlevels = paste0("chr", 1:6),
+  coord_span = as.integer(params$gr_scaling_coord_span),
+  width_max = 1500L
+)
+gr_scaling_query <- simulate_granges(
+  as.integer(params$gr_scaling_query_n),
+  seed = params$seed + 1501L,
+  seqlevels = paste0("chr", 1:6),
+  coord_span = as.integer(params$gr_scaling_coord_span),
+  width_max = 1500L
+)
+
+gr_scaling_fast_idx <- fastRanges::fast_build_index(gr_scaling_subject)
+gr_scaling_gnc_idx <- GenomicRanges::GNCList(gr_scaling_subject)
+
+gr_scaling_ref_direct <- GenomicRanges::findOverlaps(
+  gr_scaling_query,
+  gr_scaling_subject,
+  ignore.strand = FALSE
+)
+gr_scaling_ref_gnc <- GenomicRanges::findOverlaps(
+  gr_scaling_query,
+  gr_scaling_gnc_idx,
+  ignore.strand = FALSE
+)
+
+stopifnot(identical(
+  normalize_hit_pairs(gr_scaling_ref_direct),
+  normalize_hit_pairs(gr_scaling_ref_gnc)
+))
+
+gr_scaling_ref_hits <- length(gr_scaling_ref_direct)
+
+gr_scaling_list <- list()
+for (i in seq_along(thread_grid)) {
+  th <- thread_grid[i]
+
+  direct_local <- time_engine(
+    "fastRanges_direct_GRanges",
+    function() fastRanges::fast_find_overlaps(
+      gr_scaling_query,
+      gr_scaling_subject,
+      threads = th,
+      deterministic = FALSE
+    ),
+    params$iterations
+  )
+  if (any(direct_local$hits != gr_scaling_ref_hits)) {
+    stop("Hit count mismatch for direct fastRanges in GRanges scaling benchmark")
+  }
+  direct_local$threads <- th
+  gr_scaling_list[[length(gr_scaling_list) + 1L]] <- direct_local
+
+  indexed_local <- time_engine(
+    "fastRanges_indexed_GRanges",
+    function() fastRanges::fast_find_overlaps(
+      gr_scaling_query,
+      gr_scaling_fast_idx,
+      threads = th,
+      deterministic = FALSE
+    ),
+    params$iterations
+  )
+  if (any(indexed_local$hits != gr_scaling_ref_hits)) {
+    stop("Hit count mismatch for indexed fastRanges in GRanges scaling benchmark")
+  }
+  indexed_local$threads <- th
+  gr_scaling_list[[length(gr_scaling_list) + 1L]] <- indexed_local
+}
+
+gr_scaling_baseline <- dplyr::bind_rows(
+  time_engine(
+    "GenomicRanges_findOverlaps",
+    function() GenomicRanges::findOverlaps(
+      gr_scaling_query,
+      gr_scaling_subject,
+      ignore.strand = FALSE
+    ),
+    params$iterations
+  ),
+  time_engine(
+    "GenomicRanges_GNCList",
+    function() GenomicRanges::findOverlaps(
+      gr_scaling_query,
+      gr_scaling_gnc_idx,
+      ignore.strand = FALSE
+    ),
+    params$iterations
+  )
+)
+if (any(gr_scaling_baseline$hits != gr_scaling_ref_hits)) {
+  stop("Hit count mismatch for GenomicRanges baseline in GRanges scaling benchmark")
+}
+gr_scaling_baseline$threads <- 1L
+
+gr_scaling <- dplyr::bind_rows(gr_scaling_list, gr_scaling_baseline)
+
+gr_scaling_summary <- gr_scaling %>%
+  dplyr::group_by(engine, threads) %>%
+  dplyr::summarise(
+    median_sec = median(elapsed_sec),
+    min_sec = min(elapsed_sec),
+    max_sec = max(elapsed_sec),
+    .groups = "drop"
+  )
+
+gr_scaling_baseline_sec <- gr_scaling_summary$median_sec[
+  gr_scaling_summary$engine == "GenomicRanges_findOverlaps" & gr_scaling_summary$threads == 1L
+]
+
+gr_scaling_summary <- gr_scaling_summary %>%
+  dplyr::group_by(engine) %>%
+  dplyr::arrange(threads, .by_group = TRUE) %>%
+  dplyr::mutate(speedup_vs_1_thread = first(median_sec) / median_sec) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(speedup_vs_genomicranges = as.numeric(gr_scaling_baseline_sec) / median_sec)
+
+gr_scaling_summary %>% dplyr::arrange(engine, threads)
+```
+
+This section uses a denser chromosome layout (`chr1`-`chr6` over a smaller
+coordinate span) so overlap density is higher than in the broad end-to-end
+stress test above. The goal is to expose scaling behavior when traversal work,
+not just object size, becomes a stronger part of runtime.
+
+```{r granges-scaling-runtime-plot, fig.width=10, fig.height=5}
+gr_scaling_fast <- dplyr::filter(gr_scaling_summary, grepl("^fastRanges", engine))
+gr_scaling_serial <- dplyr::filter(gr_scaling_summary, grepl("^GenomicRanges", engine))
+
+p_gr_scaling_runtime <- ggplot(gr_scaling_fast, aes(x = threads, y = median_sec, color = engine)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_hline(
+    data = gr_scaling_serial,
+    aes(yintercept = median_sec, color = engine),
+    linetype = "dashed",
+    linewidth = 0.9
+  ) +
+  geom_point(
+    data = gr_scaling_serial,
+    aes(x = threads, y = median_sec, color = engine),
+    size = 3
+  ) +
+  scale_x_continuous(breaks = thread_grid) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "GRanges thread scaling on a denser workload",
+    x = "Threads",
+    y = "Median elapsed time (sec)",
+    color = "Engine"
+  ) +
+  theme_pub()
+
+p_gr_scaling_runtime
+
+ggsave(file.path(fig_dir, "granges_scaling_runtime.png"), p_gr_scaling_runtime, width = 10, height = 5, dpi = 300)
+```
+
+```{r granges-scaling-speedup-plot, fig.width=10, fig.height=5}
+p_gr_scaling_speedup <- ggplot(
+  dplyr::filter(gr_scaling_summary, grepl("^fastRanges", engine)),
+  aes(x = threads, y = speedup_vs_1_thread, color = engine)
+) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "grey40") +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = thread_grid) +
+  labs(
+    title = "GRanges speedup vs 1 thread",
+    x = "Threads",
+    y = "Speedup vs 1 thread",
+    color = "Engine"
+  ) +
+  theme_pub()
+
+p_gr_scaling_speedup
+
+ggsave(file.path(fig_dir, "granges_scaling_speedup.png"), p_gr_scaling_speedup, width = 10, height = 5, dpi = 300)
 ```
 
 ## Thread Scaling: IRanges vs fastRanges (Fair Indexed Comparison)
@@ -472,11 +679,16 @@ run_repeated_gr_gnclist <- function() {
 }
 
 repeat_bench <- dplyr::bind_rows(
-  time_engine("fastRanges_index_reuse", run_repeated_fast_indexed, params$iterations),
-  time_engine("fastRanges_direct", run_repeated_fast_direct, params$iterations),
-  time_engine("GenomicRanges_findOverlaps", run_repeated_gr_direct, params$iterations),
-  time_engine("GenomicRanges_GNCList", run_repeated_gr_gnclist, params$iterations)
+  time_engine("fastRanges_index_reuse", run_repeated_fast_indexed, params$iterations, size_fn = identity),
+  time_engine("fastRanges_direct", run_repeated_fast_direct, params$iterations, size_fn = identity),
+  time_engine("GenomicRanges_findOverlaps", run_repeated_gr_direct, params$iterations, size_fn = identity),
+  time_engine("GenomicRanges_GNCList", run_repeated_gr_gnclist, params$iterations, size_fn = identity)
 )
+
+ref_repeat_hits <- unique(repeat_bench$hits[repeat_bench$engine == "GenomicRanges_findOverlaps"])
+if (length(ref_repeat_hits) != 1L || any(repeat_bench$hits != ref_repeat_hits[1])) {
+  stop("Total hit mismatch between engines in repeated-query benchmark")
+}
 
 repeat_bench_summary <- repeat_bench %>%
   dplyr::group_by(engine) %>%
@@ -628,7 +840,7 @@ got_self <- fastRanges::fast_self_overlaps(
 stopifnot(identical(unname(got_group[, colnames(ref_group), drop = FALSE]), unname(ref_group)))
 stopifnot(isTRUE(all.equal(got_agg, ref_agg, tolerance = 1e-10, check.attributes = FALSE)))
 stopifnot(identical(got_window$overlap_count, ref_window$overlap_count))
-stopifnot(length(got_self) == length(ref_self))
+stopifnot(identical(normalize_hit_pairs(got_self), normalize_hit_pairs(ref_self)))
 
 drv_bench <- dplyr::bind_rows(
   time_task(
@@ -811,14 +1023,32 @@ benchmark_run_metadata <- data.frame(
   max_threads_used = as.integer(max_threads),
   thread_grid = paste(thread_grid, collapse = ","),
   available_physical_cores = as.integer(available_threads),
+  r_version = R.version.string,
+  platform = R.version$platform,
+  sysname = Sys.info()[["sysname"]],
+  release = Sys.info()[["release"]],
+  machine = Sys.info()[["machine"]],
+  stringsAsFactors = FALSE
+)
+
+package_versions <- data.frame(
+  package = c("fastRanges", "GenomicRanges", "IRanges", "S4Vectors", "ggplot2", "dplyr", "tidyr"),
+  version = vapply(
+    c("fastRanges", "GenomicRanges", "IRanges", "S4Vectors", "ggplot2", "dplyr", "tidyr"),
+    function(pkg) as.character(utils::packageVersion(pkg)),
+    character(1)
+  ),
   stringsAsFactors = FALSE
 )
 
 benchmark_tables <- list(
   benchmark_run_metadata = benchmark_run_metadata,
+  package_versions = package_versions,
   gr_bench_raw = gr_bench,
   gr_summary = gr_summary,
   gr_speedup = gr_speedup,
+  gr_scaling_raw = gr_scaling,
+  gr_scaling_summary = gr_scaling_summary,
   ir_scaling_raw = ir_scaling,
   ir_scaling_summary = ir_scaling_summary,
   ir_absolute_winner = ir_absolute_winner,
@@ -880,6 +1110,10 @@ ir_fast <- ir_scaling_summary %>%
   dplyr::filter(engine == "fastRanges_indexed_IRanges")
 ir_fast_best <- ir_fast[which.max(ir_fast$speedup_vs_1_thread), , drop = FALSE]
 
+gr_scale_fast <- gr_scaling_summary %>%
+  dplyr::filter(engine == "fastRanges_indexed_GRanges")
+gr_scale_fast_best <- gr_scale_fast[which.max(gr_scale_fast$speedup_vs_1_thread), , drop = FALSE]
+
 drv_fast <- drv_summary %>%
   dplyr::filter(engine == "fastRanges")
 drv_median_speedup <- median(drv_fast$speedup_vs_baseline, na.rm = TRUE)
@@ -893,6 +1127,11 @@ cat(sprintf(
   "- Reusing a pre-built index reduced runtime by **%.2fx** versus direct `fastRanges` overlap calls in repeated-query workloads (and **%.2fx** versus `GenomicRanges::findOverlaps`).\n",
   repeat_direct_gain,
   repeat_gr_speedup
+))
+cat(sprintf(
+  "- On the denser GRanges scaling workload, indexed `fastRanges` reached **%.2fx** speedup versus its own 1-thread baseline at **%d threads**.\n",
+  gr_scale_fast_best$speedup_vs_1_thread,
+  gr_scale_fast_best$threads
 ))
 cat(sprintf(
   "- Pre-indexed `fastRanges` on IRanges workloads peaked at **%.2fx** speedup versus 1 thread at **%d threads**.\n",
