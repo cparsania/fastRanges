@@ -3,19 +3,57 @@
 \docType{data}
 \name{fast_ranges_example}
 \alias{fast_ranges_example}
-\title{Example Genomic Ranges for Documentation and Tests}
+\title{Example Genomic Ranges for Documentation, Tests, and Tutorials}
 \format{
 A named list with two components:
 \describe{
-\item{query}{A \code{GRanges} object of query intervals.}
-\item{subject}{A \code{GRanges} object of subject intervals.}
+\item{query}{A \code{GRanges} object with 6 genomic intervals and metadata
+columns \code{query_id} and \code{score}.}
+\item{subject}{A \code{GRanges} object with 7 genomic intervals and metadata
+columns \code{gene_id} and \code{biotype}.}
 }
 }
 \source{
-Generated in \code{data-raw/make_example_data.R}.
+Generated from \code{data-raw/make_example_data.R}, which also writes
+matching BED files to \verb{inst/extdata/}.
 }
 \description{
-A small list containing \code{query} and \code{subject} \code{GRanges} objects used in
-package examples and tests.
+\code{fast_ranges_example} is a small reproducible dataset shipped with the
+package. It is intended for documentation examples, teaching, unit tests,
+and quick smoke checks of overlap workflows.
+}
+\details{
+The object is a named list with two \code{GRanges} components:
+\itemize{
+\item \code{query}: six example genomic intervals that behave like user-supplied
+peaks, windows, or regions of interest.
+\item \code{subject}: seven example genomic intervals that behave like annotation
+features such as genes, promoters, enhancers, or other reference ranges.
+}
+
+Metadata columns are included so examples can demonstrate joins,
+grouped summaries, and overlap aggregation:
+\itemize{
+\item \code{query} contains \code{query_id} and \code{score}
+\item \code{subject} contains \code{gene_id} and \code{biotype}
+}
+
+The same records are also distributed as plain BED files in
+\code{inst/extdata/query_peaks.bed} and \code{inst/extdata/subject_genes.bed}. Use the
+in-memory dataset when you want a ready-to-run example in R, and use the BED
+files when you want to demonstrate file import or command-line workflows.
+
+This dataset is intentionally small and synthetic. It is designed for
+examples and tests, not as a biological reference resource.
+}
+\examples{
+data("fast_ranges_example", package = "fastRanges")
+query <- fast_ranges_example$query
+subject <- fast_ranges_example$subject
+
+query
+subject
+
+fast_find_overlaps(query, subject, threads = 1)
 }
 \keyword{datasets}

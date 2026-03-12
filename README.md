@@ -143,6 +143,34 @@ group_counts <- fast_count_overlaps_by_group(query, subject, group_col = "type",
 sum_score <- fast_overlap_aggregate(query, subject, value_col = "score", fun = "sum", threads = 4)
 ```
 
+## Example Data
+
+The package ships with a small reproducible example dataset for learning and
+testing:
+
+```r
+data("fast_ranges_example", package = "fastRanges")
+names(fast_ranges_example)
+```
+
+It contains:
+
+- `query`: 6 genomic intervals with metadata columns `query_id` and `score`
+- `subject`: 7 genomic intervals with metadata columns `gene_id` and `biotype`
+
+Use it when you want documentation examples to run immediately without reading
+files from disk.
+
+Matching BED files are also shipped in `inst/extdata`:
+
+```r
+system.file("extdata", "query_peaks.bed", package = "fastRanges")
+system.file("extdata", "subject_genes.bed", package = "fastRanges")
+```
+
+Use those files when you want to demonstrate import from BED or compare
+file-based workflows with in-memory `GRanges` analysis.
+
 ## Function Guide
 
 ### Overlap Core

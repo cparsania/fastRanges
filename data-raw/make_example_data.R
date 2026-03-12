@@ -1,3 +1,7 @@
+# Regenerate the packaged example data used in documentation, tests, and
+# shipped BED examples. Run from the package root with:
+# source("data-raw/make_example_data.R")
+
 if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
   stop("GenomicRanges is required to build example data")
 }
@@ -22,6 +26,13 @@ S4Vectors::mcols(subject)$gene_id <- c("gA", "gB", "gC", "gD", "gE", "gF", "gG")
 S4Vectors::mcols(subject)$biotype <- c("promoter", "enhancer", "enhancer", "promoter", "gene_body", "promoter", "enhancer")
 
 fast_ranges_example <- list(query = query, subject = subject)
+
+stopifnot(
+  length(query) == 6L,
+  length(subject) == 7L,
+  identical(colnames(as.data.frame(S4Vectors::mcols(query))), c("query_id", "score")),
+  identical(colnames(as.data.frame(S4Vectors::mcols(subject))), c("gene_id", "biotype"))
+)
 
 if (!dir.exists("data")) dir.create("data", recursive = TRUE)
 save(fast_ranges_example, file = "data/fast_ranges_example.rda", compress = "xz")

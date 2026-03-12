@@ -81,12 +81,32 @@ That distinction is the main decision point when choosing a function.
 The package ships with a small reproducible example:
 
 ```{r inspect-example}
+names(fast_ranges_example)
 query
 subject
 ```
 
 In a real analysis, `query` might be ChIP-seq peaks and `subject` might be
 genes, exons, enhancers, promoters, or other genomic annotations.
+
+This example is intentionally small so every function in the vignette can run
+quickly. The structure is:
+
+- `query`: 6 genomic intervals with metadata columns `query_id` and `score`
+- `subject`: 7 genomic intervals with metadata columns `gene_id` and `biotype`
+
+If you want file-based examples instead of in-memory objects, the same records
+are also installed as BED files:
+
+```{r example-files}
+system.file("extdata", "query_peaks.bed", package = "fastRanges")
+system.file("extdata", "subject_genes.bed", package = "fastRanges")
+```
+
+That split is deliberate:
+
+- use `fast_ranges_example` for package examples, tutorials, and tests
+- use the BED files when demonstrating import pipelines or command-line inputs
 
 ## Core Overlap Operations
 
