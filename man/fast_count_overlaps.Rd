@@ -55,6 +55,9 @@ Integer vector with one element per query range.
 \description{
 Count subject overlaps per query range.
 }
+\details{
+\code{deterministic} does not change returned counts for this summary output.
+}
 \section{Overlap semantics}{
 
 Core interval semantics (ASCII schematic):

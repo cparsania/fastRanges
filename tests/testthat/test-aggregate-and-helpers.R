@@ -46,6 +46,37 @@ test_that("fast_overlap_aggregate count and sum are correct", {
   expect_equal(sum_got, sum_ref)
 })
 
+test_that("fast_overlap_aggregate mean/min/max match reference", {
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(c(1, 10, 20), width = 5))
+  s <- GenomicRanges::GRanges("chr1", IRanges::IRanges(c(2, 9, 18, 22), width = 5))
+  S4Vectors::mcols(s)$score <- c(2, 5, 1, 4)
+
+  got_mean <- fast_overlap_aggregate(q, s, value_col = "score", fun = "mean")
+  got_min <- fast_overlap_aggregate(q, s, value_col = "score", fun = "min")
+  got_max <- fast_overlap_aggregate(q, s, value_col = "score", fun = "max")
+
+  h <- GenomicRanges::findOverlaps(q, s)
+  qh <- S4Vectors::queryHits(h)
+  sh <- S4Vectors::subjectHits(h)
+  scores <- S4Vectors::mcols(s)$score[sh]
+
+  mean_ref <- rep(NA_real_, length(q))
+  min_ref <- rep(NA_real_, length(q))
+  max_ref <- rep(NA_real_, length(q))
+  for (i in seq_len(length(q))) {
+    vals <- scores[qh == i]
+    if (length(vals) > 0L) {
+      mean_ref[i] <- mean(vals)
+      min_ref[i] <- min(vals)
+      max_ref[i] <- max(vals)
+    }
+  }
+
+  expect_equal(got_mean, mean_ref)
+  expect_equal(got_min, min_ref)
+  expect_equal(got_max, max_ref)
+})
+
 test_that("range operation wrappers match IRanges implementations", {
   x <- IRanges::IRanges(start = c(1, 4, 10), end = c(5, 8, 12))
   y <- IRanges::IRanges(start = c(3, 20), end = c(8, 21))

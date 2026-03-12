@@ -2,6 +2,9 @@
 #'
 #' Count overlaps per query and per subject metadata group.
 #'
+#' `deterministic` does not change returned group counts for this summary
+#' output.
+#'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
 #' @param group_col Subject metadata column name used for grouping.
@@ -51,6 +54,7 @@ fast_count_overlaps_by_group <- function(
   if (length(group_levels) == 0L) {
     return(matrix(0L, nrow = length(query), ncol = 0L))
   }
+  group_index <- match(groups, group_levels)
 
   hits <- fast_find_overlaps(
     query = query,
@@ -60,7 +64,7 @@ fast_count_overlaps_by_group <- function(
     type = match.arg(type),
     ignore_strand = ignore_strand,
     threads = threads,
-    deterministic = deterministic
+    deterministic = FALSE
   )
 
   out <- matrix(0L, nrow = length(query), ncol = length(group_levels))
@@ -72,23 +76,27 @@ fast_count_overlaps_by_group <- function(
 
   qh <- S4Vectors::queryHits(hits)
   sh <- S4Vectors::subjectHits(hits)
-  hit_groups <- groups[sh]
-  keep <- !is.na(hit_groups)
+  hit_group_idx <- group_index[sh]
+  keep <- !is.na(hit_group_idx)
 
   if (!any(keep)) {
     return(out)
   }
 
   qh <- qh[keep]
-  hit_groups <- hit_groups[keep]
-  tab <- table(qh, factor(hit_groups, levels = group_levels))
-  out[as.integer(rownames(tab)), ] <- out[as.integer(rownames(tab)), , drop = FALSE] + tab
+  hit_group_idx <- hit_group_idx[keep]
+  n_query <- length(query)
+  linear_index <- qh + (hit_group_idx - 1L) * n_query
+  out[] <- tabulate(linear_index, nbins = n_query * length(group_levels))
   out
 }
 
 #' Aggregate Subject Metadata Over Overlaps
 #'
 #' Aggregate a numeric subject metadata column across overlaps for each query.
+#'
+#' `deterministic` does not change returned aggregate values for this summary
+#' output.
 #'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
@@ -146,7 +154,7 @@ fast_overlap_aggregate <- function(
       type = match.arg(type),
       ignore_strand = ignore_strand,
       threads = threads,
-      deterministic = deterministic
+      deterministic = FALSE
     )))
   }
 
@@ -158,7 +166,7 @@ fast_overlap_aggregate <- function(
     type = match.arg(type),
     ignore_strand = ignore_strand,
     threads = threads,
-    deterministic = deterministic
+    deterministic = FALSE
   )
 
   out <- rep(NA_real_, length(query))
@@ -180,16 +188,35 @@ fast_overlap_aggregate <- function(
     return(out)
   }
 
-  split_x <- split(x, qh)
-  agg_fun <- switch(
-    fun,
-    sum = function(z) sum(z, na.rm = na_rm),
-    mean = function(z) mean(z, na.rm = na_rm),
-    min = function(z) min(z, na.rm = na_rm),
-    max = function(z) max(z, na.rm = na_rm)
-  )
+  if (fun %in% c("sum", "mean")) {
+    sum_mat <- rowsum(x, qh, reorder = FALSE)
+    idx <- as.integer(rownames(sum_mat))
 
-  aggregated <- vapply(split_x, agg_fun, numeric(1))
-  out[as.integer(names(aggregated))] <- aggregated
+    if (fun == "sum") {
+      out[idx] <- as.numeric(sum_mat[, 1L])
+      return(out)
+    }
+
+    count_mat <- rowsum(rep.int(1, length(x)), qh, reorder = FALSE)
+    out[idx] <- as.numeric(sum_mat[, 1L] / count_mat[, 1L])
+    return(out)
+  }
+
+  ord <- order(qh)
+  qh <- qh[ord]
+  x <- x[ord]
+  q_run <- rle(qh)
+  run_ends <- cumsum(q_run$lengths)
+  run_starts <- run_ends - q_run$lengths + 1L
+
+  agg_vals <- vapply(
+    seq_along(run_starts),
+    function(i) {
+      seg <- x[run_starts[i]:run_ends[i]]
+      if (fun == "min") min(seg) else max(seg)
+    },
+    numeric(1)
+  )
+  out[as.integer(q_run$values)] <- agg_vals
   out
 }

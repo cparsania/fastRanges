@@ -55,6 +55,10 @@ Logical vector with one element per query range.
 \description{
 Return \code{TRUE} for queries that overlap at least one subject range.
 }
+\details{
+\code{deterministic} does not change returned logical values for this summary
+output.
+}
 \section{Overlap semantics}{
 
 Core interval semantics (ASCII schematic):

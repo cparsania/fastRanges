@@ -81,6 +81,27 @@ test_that("indexed IRanges hits are thread-invariant when deterministic is FALSE
   expect_equal(canon_hits(h1), canon_hits(h8))
 })
 
+test_that("indexed count kernel matches hit tabulation across threads", {
+  set.seed(11)
+  q <- IRanges::IRanges(
+    start = sample.int(30000L, 800L, replace = TRUE),
+    width = sample.int(180L, 800L, replace = TRUE)
+  )
+  s <- IRanges::IRanges(
+    start = sample.int(30000L, 3000L, replace = TRUE),
+    width = sample.int(180L, 3000L, replace = TRUE)
+  )
+  idx <- fast_build_index(s)
+
+  c1 <- fast_count_overlaps(q, idx, threads = 1, deterministic = FALSE)
+  c8 <- fast_count_overlaps(q, idx, threads = 8, deterministic = FALSE)
+  h <- fast_find_overlaps(q, idx, threads = 4, deterministic = FALSE)
+  href <- tabulate(S4Vectors::queryHits(h), nbins = length(q))
+
+  expect_equal(c1, href)
+  expect_equal(c8, href)
+})
+
 test_that("count and any wrappers agree with overlap hits", {
   data(fast_ranges_example, package = "fastRanges")
   q <- fast_ranges_example$query

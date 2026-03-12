@@ -2,6 +2,44 @@
 #' @importFrom Rcpp evalCpp
 NULL
 
+#' @keywords internal
+.prepare_overlap_inputs <- function(
+    query,
+    subject,
+    max_gap,
+    min_overlap,
+    type,
+    threads) {
+  .assert_supported_ranges(query, "query")
+  type <- match.arg(type)
+  .assert_scalar_integerish(max_gap, "max_gap")
+  .assert_scalar_integerish(min_overlap, "min_overlap")
+  threads <- .normalize_threads(threads)
+
+  if (inherits(subject, "fast_ranges_index")) {
+    idx <- subject
+    subject_n <- idx$subject_n
+    seq_map <- idx$seq_map
+  } else {
+    .assert_supported_ranges(subject, "subject")
+    idx <- fast_build_index(subject)
+    subject_n <- length(subject)
+    seq_map <- idx$seq_map
+  }
+
+  q <- .encode_query(query, seq_map)
+
+  list(
+    idx = idx,
+    q = q,
+    subject_n = subject_n,
+    type = type,
+    max_gap = as.integer(max_gap),
+    min_overlap = as.integer(min_overlap),
+    threads = as.integer(threads)
+  )
+}
+
 #' Find Overlaps with Deterministic Multithreading
 #'
 #' Compute overlap pairs between `query` and `subject` using a multithreaded
@@ -32,43 +70,33 @@ fast_find_overlaps <- function(
     ignore_strand = FALSE,
     threads = fast_default_threads(),
     deterministic = TRUE) {
-  .assert_supported_ranges(query, "query")
-  type <- match.arg(type)
-  .assert_scalar_integerish(max_gap, "max_gap")
-  .assert_scalar_integerish(min_overlap, "min_overlap")
-  threads <- .normalize_threads(threads)
-
-  if (inherits(subject, "fast_ranges_index")) {
-    idx <- subject
-    subject_n <- idx$subject_n
-    seq_map <- idx$seq_map
-  } else {
-    .assert_supported_ranges(subject, "subject")
-    idx <- fast_build_index(subject)
-    subject_n <- length(subject)
-    seq_map <- idx$seq_map
-  }
-
-  q <- .encode_query(query, seq_map)
+  inputs <- .prepare_overlap_inputs(
+    query = query,
+    subject = subject,
+    max_gap = max_gap,
+    min_overlap = min_overlap,
+    type = type,
+    threads = threads
+  )
 
   hit_idx <- cpp_find_overlaps_indexed(
-    q_start = q$start,
-    q_end = q$end,
-    q_seq = q$seq_id,
-    q_strand = q$strand,
-    s_start = idx$subject_start,
-    s_end = idx$subject_end,
-    s_seq = idx$subject_seq,
-    s_strand = idx$subject_strand,
-    s_original = idx$subject_original_index,
-    partition_keys = idx$partition_keys,
-    partition_starts = idx$partition_starts,
-    partition_ends = idx$partition_ends,
-    max_gap = as.integer(max_gap),
-    min_overlap = as.integer(min_overlap),
-    type = type,
+    q_start = inputs$q$start,
+    q_end = inputs$q$end,
+    q_seq = inputs$q$seq_id,
+    q_strand = inputs$q$strand,
+    s_start = inputs$idx$subject_start,
+    s_end = inputs$idx$subject_end,
+    s_seq = inputs$idx$subject_seq,
+    s_strand = inputs$idx$subject_strand,
+    s_original = inputs$idx$subject_original_index,
+    partition_keys = inputs$idx$partition_keys,
+    partition_starts = inputs$idx$partition_starts,
+    partition_ends = inputs$idx$partition_ends,
+    max_gap = inputs$max_gap,
+    min_overlap = inputs$min_overlap,
+    type = inputs$type,
     ignore_strand = isTRUE(ignore_strand),
-    threads = as.integer(threads),
+    threads = inputs$threads,
     deterministic = isTRUE(deterministic)
   )
 
@@ -76,7 +104,7 @@ fast_find_overlaps <- function(
     from = hit_idx$query_hits,
     to = hit_idx$subject_hits,
     nLnode = length(query),
-    nRnode = subject_n,
+    nRnode = inputs$subject_n,
     sort.by.query = FALSE
   )
 }
@@ -84,6 +112,8 @@ fast_find_overlaps <- function(
 #' Count Overlaps
 #'
 #' Count subject overlaps per query range.
+#'
+#' `deterministic` does not change returned counts for this summary output.
 #'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
@@ -103,23 +133,42 @@ fast_count_overlaps <- function(
     ignore_strand = FALSE,
     threads = fast_default_threads(),
     deterministic = TRUE) {
-  hits <- fast_find_overlaps(
+  .assert_scalar_logical(deterministic, "deterministic")
+  inputs <- .prepare_overlap_inputs(
     query = query,
     subject = subject,
     max_gap = max_gap,
     min_overlap = min_overlap,
-    type = match.arg(type),
-    ignore_strand = ignore_strand,
-    threads = threads,
-    deterministic = deterministic
+    type = type,
+    threads = threads
   )
 
-  tabulate(S4Vectors::queryHits(hits), nbins = length(query))
+  cpp_count_overlaps_indexed(
+    q_start = inputs$q$start,
+    q_end = inputs$q$end,
+    q_seq = inputs$q$seq_id,
+    q_strand = inputs$q$strand,
+    s_start = inputs$idx$subject_start,
+    s_end = inputs$idx$subject_end,
+    s_seq = inputs$idx$subject_seq,
+    s_strand = inputs$idx$subject_strand,
+    partition_keys = inputs$idx$partition_keys,
+    partition_starts = inputs$idx$partition_starts,
+    partition_ends = inputs$idx$partition_ends,
+    max_gap = inputs$max_gap,
+    min_overlap = inputs$min_overlap,
+    type = inputs$type,
+    ignore_strand = isTRUE(ignore_strand),
+    threads = inputs$threads
+  )
 }
 
 #' Overlap Existence per Query
 #'
 #' Return `TRUE` for queries that overlap at least one subject range.
+#'
+#' `deterministic` does not change returned logical values for this summary
+#' output.
 #'
 #' @inheritParams fast_find_overlaps
 #' @inheritSection fast_find_overlaps Overlap semantics
@@ -144,7 +193,7 @@ fast_overlaps_any <- function(
     subject = subject,
     max_gap = max_gap,
     min_overlap = min_overlap,
-    type = match.arg(type),
+    type = type,
     ignore_strand = ignore_strand,
     threads = threads,
     deterministic = deterministic

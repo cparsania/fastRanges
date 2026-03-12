@@ -38,9 +38,36 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_count_overlaps_indexed
+Rcpp::IntegerVector cpp_count_overlaps_indexed(const Rcpp::IntegerVector& q_start, const Rcpp::IntegerVector& q_end, const Rcpp::IntegerVector& q_seq, const Rcpp::IntegerVector& q_strand, const Rcpp::IntegerVector& s_start, const Rcpp::IntegerVector& s_end, const Rcpp::IntegerVector& s_seq, const Rcpp::IntegerVector& s_strand, const Rcpp::IntegerVector& partition_keys, const Rcpp::IntegerVector& partition_starts, const Rcpp::IntegerVector& partition_ends, const int max_gap, const int min_overlap, const std::string type, const bool ignore_strand, const int threads);
+RcppExport SEXP _fastRanges_cpp_count_overlaps_indexed(SEXP q_startSEXP, SEXP q_endSEXP, SEXP q_seqSEXP, SEXP q_strandSEXP, SEXP s_startSEXP, SEXP s_endSEXP, SEXP s_seqSEXP, SEXP s_strandSEXP, SEXP partition_keysSEXP, SEXP partition_startsSEXP, SEXP partition_endsSEXP, SEXP max_gapSEXP, SEXP min_overlapSEXP, SEXP typeSEXP, SEXP ignore_strandSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type q_start(q_startSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type q_end(q_endSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type q_seq(q_seqSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type q_strand(q_strandSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type s_start(s_startSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type s_end(s_endSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type s_seq(s_seqSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type s_strand(s_strandSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type partition_keys(partition_keysSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type partition_starts(partition_startsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type partition_ends(partition_endsSEXP);
+    Rcpp::traits::input_parameter< const int >::type max_gap(max_gapSEXP);
+    Rcpp::traits::input_parameter< const int >::type min_overlap(min_overlapSEXP);
+    Rcpp::traits::input_parameter< const std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< const bool >::type ignore_strand(ignore_strandSEXP);
+    Rcpp::traits::input_parameter< const int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_count_overlaps_indexed(q_start, q_end, q_seq, q_strand, s_start, s_end, s_seq, s_strand, partition_keys, partition_starts, partition_ends, max_gap, min_overlap, type, ignore_strand, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_fastRanges_cpp_find_overlaps_indexed", (DL_FUNC) &_fastRanges_cpp_find_overlaps_indexed, 18},
+    {"_fastRanges_cpp_count_overlaps_indexed", (DL_FUNC) &_fastRanges_cpp_count_overlaps_indexed, 16},
     {NULL, NULL, 0}
 };
 

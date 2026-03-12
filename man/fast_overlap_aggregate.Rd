@@ -66,6 +66,10 @@ Numeric vector with one value per query.
 \description{
 Aggregate a numeric subject metadata column across overlaps for each query.
 }
+\details{
+\code{deterministic} does not change returned aggregate values for this summary
+output.
+}
 \section{Overlap semantics}{
 
 Core interval semantics (ASCII schematic):

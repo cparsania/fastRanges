@@ -62,6 +62,10 @@ Integer matrix with one row per query and one column per group.
 \description{
 Count overlaps per query and per subject metadata group.
 }
+\details{
+\code{deterministic} does not change returned group counts for this summary
+output.
+}
 \section{Overlap semantics}{
 
 Core interval semantics (ASCII schematic):

@@ -79,10 +79,49 @@ thread_grid <- sort(unique(thread_grid[thread_grid >= 1L & thread_grid <= max_th
 if (!1L %in% thread_grid) thread_grid <- sort(unique(c(1L, thread_grid)))
 if (!max_threads %in% thread_grid) thread_grid <- sort(unique(c(thread_grid, max_threads)))
 
-input_dir <- dirname(knitr::current_input(dir = TRUE))
-proj_dir <- normalizePath(file.path(input_dir, "..", ".."), winslash = "/", mustWork = TRUE)
+input_file <- knitr::current_input(dir = TRUE)
+input_dir <- dirname(input_file)
+
+resolve_project_root <- function(input_dir) {
+  env_root <- Sys.getenv("FASTRANGES_BENCH_ROOT", unset = "")
+  if (nzchar(env_root)) {
+    env_root <- normalizePath(env_root, winslash = "/", mustWork = TRUE)
+    if (!file.exists(file.path(env_root, "DESCRIPTION"))) {
+      stop("FASTRANGES_BENCH_ROOT is set but DESCRIPTION not found at: ", env_root)
+    }
+    return(env_root)
+  }
+
+  candidate_roots <- unique(c(
+    normalizePath(getwd(), winslash = "/", mustWork = TRUE),
+    normalizePath(file.path(input_dir, "..", ".."), winslash = "/", mustWork = FALSE),
+    normalizePath(input_dir, winslash = "/", mustWork = FALSE)
+  ))
+
+  for (cand in candidate_roots) {
+    if (file.exists(file.path(cand, "DESCRIPTION")) &&
+        dir.exists(file.path(cand, "inst", "benchmarks"))) {
+      return(cand)
+    }
+  }
+
+  stop(
+    "Could not detect fastRanges project root. ",
+    "Run from package root or set FASTRANGES_BENCH_ROOT=/path/to/fastRanges."
+  )
+}
+
+proj_dir <- resolve_project_root(input_dir)
 fig_dir <- file.path(proj_dir, "inst", "benchmarks", "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
+results_dir <- file.path(proj_dir, "inst", "benchmarks", "results")
+if (!dir.exists(results_dir)) dir.create(results_dir, recursive = TRUE)
+
+write_result_table <- function(tbl, name) {
+  path <- file.path(results_dir, paste0(name, ".csv"))
+  utils::write.csv(as.data.frame(tbl), path, row.names = FALSE)
+  path
+}
 
 simulate_granges <- function(n, seed, seqlevels = paste0("chr", 1:22)) {
   set.seed(seed)
@@ -153,6 +192,9 @@ theme_pub <- function() {
 cat("Detected physical cores =", available_threads, "\n")
 cat("Using benchmark max_threads =", max_threads, "\n")
 cat("Thread grid =", paste(thread_grid, collapse = ", "), "\n")
+cat("Input qmd =", input_file, "\n")
+cat("Resolved project root =", proj_dir, "\n")
+cat("Results directory =", results_dir, "\n")
 ```
 
 ## Choosing the Right fastRanges Mode
@@ -389,6 +431,32 @@ p_ir_scaling
 ggsave(file.path(fig_dir, "iranges_thread_scaling.png"), p_ir_scaling, width = 10, height = 5, dpi = 300)
 ```
 
+```{r iranges-absolute-winner, fig.width=10, fig.height=5}
+ir_absolute_winner <- ir_scaling_summary %>%
+  dplyr::arrange(threads, median_sec, engine) %>%
+  dplyr::group_by(threads) %>%
+  dplyr::slice_head(n = 1L) %>%
+  dplyr::ungroup()
+
+p_ir_winner <- ggplot(
+  ir_absolute_winner,
+  aes(x = factor(threads), y = median_sec, fill = engine)
+) +
+  geom_col(width = 0.72) +
+  geom_text(aes(label = sprintf("%.1f", median_sec)), vjust = -0.35, size = 3.6) +
+  labs(
+    title = "Absolute winner at each thread count (lower is better)",
+    x = "Threads",
+    y = "Median elapsed time (sec)",
+    fill = "Winning engine"
+  ) +
+  theme_pub()
+
+p_ir_winner
+
+ggsave(file.path(fig_dir, "iranges_absolute_winner_bar.png"), p_ir_winner, width = 10, height = 5, dpi = 300)
+```
+
 ## Repeated-Query Workload (Index Reuse)
 
 ```{r repeated-query-benchmark}
@@ -557,16 +625,34 @@ ref_self <- S4Vectors::Hits(
   nRnode = length(query_drv)
 )
 
-got_group <- fastRanges::fast_count_overlaps_by_group(query_drv, subject_drv, group_col = "feature_group", threads = max_threads)
-got_agg <- fastRanges::fast_overlap_aggregate(query_drv, subject_drv, value_col = "score", fun = "sum", threads = max_threads)
+got_group <- fastRanges::fast_count_overlaps_by_group(
+  query_drv,
+  subject_drv,
+  group_col = "feature_group",
+  threads = max_threads,
+  deterministic = FALSE
+)
+got_agg <- fastRanges::fast_overlap_aggregate(
+  query_drv,
+  subject_drv,
+  value_col = "score",
+  fun = "sum",
+  threads = max_threads,
+  deterministic = FALSE
+)
 got_window <- fastRanges::fast_window_count_overlaps(
   query_drv,
   subject_drv,
   window_width = as.integer(params$derived_window_width),
   step_width = as.integer(params$derived_step_width),
-  threads = max_threads
+  threads = max_threads,
+  deterministic = FALSE
 )
-got_self <- fastRanges::fast_self_overlaps(query_drv, threads = max_threads)
+got_self <- fastRanges::fast_self_overlaps(
+  query_drv,
+  threads = max_threads,
+  deterministic = FALSE
+)
 
 stopifnot(identical(unname(got_group[, colnames(ref_group), drop = FALSE]), unname(ref_group)))
 stopifnot(isTRUE(all.equal(got_agg, ref_agg, tolerance = 1e-10, check.attributes = FALSE)))
@@ -577,7 +663,13 @@ drv_bench <- dplyr::bind_rows(
   time_task(
     task = "count_by_group",
     engine = "fastRanges",
-    fn = function() fastRanges::fast_count_overlaps_by_group(query_drv, subject_drv, group_col = "feature_group", threads = max_threads),
+    fn = function() fastRanges::fast_count_overlaps_by_group(
+      query_drv,
+      subject_drv,
+      group_col = "feature_group",
+      threads = max_threads,
+      deterministic = FALSE
+    ),
     size_fn = function(x) sum(x),
     iterations = params$iterations
   ),
@@ -591,7 +683,14 @@ drv_bench <- dplyr::bind_rows(
   time_task(
     task = "aggregate_sum",
     engine = "fastRanges",
-    fn = function() fastRanges::fast_overlap_aggregate(query_drv, subject_drv, value_col = "score", fun = "sum", threads = max_threads),
+    fn = function() fastRanges::fast_overlap_aggregate(
+      query_drv,
+      subject_drv,
+      value_col = "score",
+      fun = "sum",
+      threads = max_threads,
+      deterministic = FALSE
+    ),
     size_fn = function(x) sum(x, na.rm = TRUE),
     iterations = params$iterations
   ),
@@ -610,7 +709,8 @@ drv_bench <- dplyr::bind_rows(
       subject_drv,
       window_width = as.integer(params$derived_window_width),
       step_width = as.integer(params$derived_step_width),
-      threads = max_threads
+      threads = max_threads,
+      deterministic = FALSE
     ),
     size_fn = function(x) sum(x$overlap_count),
     iterations = params$iterations
@@ -630,7 +730,11 @@ drv_bench <- dplyr::bind_rows(
   time_task(
     task = "self_overlaps",
     engine = "fastRanges",
-    fn = function() fastRanges::fast_self_overlaps(query_drv, threads = max_threads),
+    fn = function() fastRanges::fast_self_overlaps(
+      query_drv,
+      threads = max_threads,
+      deterministic = FALSE
+    ),
     size_fn = length,
     iterations = params$iterations
   ),
@@ -668,6 +772,11 @@ drv_summary <- drv_bench %>%
 
 drv_summary
 ```
+
+For derived-task throughput benchmarking, `fastRanges` calls are run with
+`deterministic = FALSE` because result ordering is not part of the measured
+task objective (counts/aggregates). Equality checks above still validate
+numerical equivalence against Bioconductor baselines.
 
 ```{r derived-runtime-plot, fig.width=10, fig.height=5}
 p_drv_runtime <- ggplot(drv_summary, aes(x = task, y = median_sec, fill = engine)) +
@@ -718,6 +827,51 @@ pub_table <- gr_speedup %>%
   dplyr::arrange(scenario, engine)
 
 pub_table
+```
+
+## Export Benchmark Tables
+
+```{r export-benchmark-tables}
+benchmark_run_metadata <- data.frame(
+  run_timestamp = as.character(Sys.time()),
+  seed = as.integer(params$seed),
+  iterations = as.integer(params$iterations),
+  max_threads_requested = as.integer(params$max_threads),
+  max_threads_used = as.integer(max_threads),
+  thread_grid = paste(thread_grid, collapse = ","),
+  available_physical_cores = as.integer(available_threads),
+  stringsAsFactors = FALSE
+)
+
+benchmark_tables <- list(
+  benchmark_run_metadata = benchmark_run_metadata,
+  gr_bench_raw = gr_bench,
+  gr_summary = gr_summary,
+  gr_speedup = gr_speedup,
+  ir_scaling_raw = ir_scaling,
+  ir_scaling_summary = ir_scaling_summary,
+  ir_absolute_winner = ir_absolute_winner,
+  repeat_bench_raw = repeat_bench,
+  repeat_bench_summary = repeat_bench_summary,
+  derived_bench_raw = drv_bench,
+  derived_summary = drv_summary,
+  publication_table = pub_table
+)
+
+benchmark_manifest <- data.frame(
+  table_name = names(benchmark_tables),
+  file = vapply(
+    names(benchmark_tables),
+    function(nm) write_result_table(benchmark_tables[[nm]], nm),
+    character(1)
+  ),
+  stringsAsFactors = FALSE
+)
+
+manifest_path <- write_result_table(benchmark_manifest, "benchmark_table_manifest")
+cat("Saved benchmark tables manifest to:", manifest_path, "\n")
+
+benchmark_manifest
 ```
 
 ## Interpretation
@@ -806,3 +960,4 @@ sessionInfo()
 -   Default parameters are intentionally large to expose differences in algorithmic and indexing behavior.
 -   Use chunk caching or higher-memory machines for full publication runs.
 -   All figures are exported to `inst/benchmarks/figures/` for manuscript use, including derived-function runtime and speedup panels.
+-   Raw and summary benchmark tables are exported as CSV files in `inst/benchmarks/results/` with a manifest file (`benchmark_table_manifest.csv`) for downstream plotting workflows.

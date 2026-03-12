@@ -30,6 +30,8 @@ fast_self_overlaps <- function(
   .assert_scalar_logical(drop_self, "drop_self")
   .assert_scalar_logical(drop_redundant, "drop_redundant")
 
+  # Always compute unsorted hits, then apply self/redundant filters and
+  # optional deterministic ordering once. This avoids unnecessary sorting.
   hits <- fast_find_overlaps(
     query = x,
     subject = x,
@@ -38,7 +40,7 @@ fast_self_overlaps <- function(
     type = match.arg(type),
     ignore_strand = ignore_strand,
     threads = threads,
-    deterministic = deterministic
+    deterministic = FALSE
   )
 
   if (length(hits) == 0L) {
@@ -48,16 +50,15 @@ fast_self_overlaps <- function(
   qh <- S4Vectors::queryHits(hits)
   sh <- S4Vectors::subjectHits(hits)
 
-  keep <- rep.int(TRUE, length(qh))
-  if (drop_self) {
-    keep <- keep & (qh != sh)
-  }
   if (drop_redundant) {
-    keep <- keep & (qh < sh)
+    keep <- qh < sh
+    qh <- qh[keep]
+    sh <- sh[keep]
+  } else if (drop_self) {
+    keep <- qh != sh
+    qh <- qh[keep]
+    sh <- sh[keep]
   }
-
-  qh <- qh[keep]
-  sh <- sh[keep]
 
   if (isTRUE(deterministic) && length(qh) > 1L) {
     ord <- order(qh, sh)

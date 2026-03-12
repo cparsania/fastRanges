@@ -5,3 +5,7 @@ cpp_find_overlaps_indexed <- function(q_start, q_end, q_seq, q_strand, s_start, 
     .Call(`_fastRanges_cpp_find_overlaps_indexed`, q_start, q_end, q_seq, q_strand, s_start, s_end, s_seq, s_strand, s_original, partition_keys, partition_starts, partition_ends, max_gap, min_overlap, type, ignore_strand, threads, deterministic)
 }
 
+cpp_count_overlaps_indexed <- function(q_start, q_end, q_seq, q_strand, s_start, s_end, s_seq, s_strand, partition_keys, partition_starts, partition_ends, max_gap, min_overlap, type, ignore_strand, threads) {
+    .Call(`_fastRanges_cpp_count_overlaps_indexed`, q_start, q_end, q_seq, q_strand, s_start, s_end, s_seq, s_strand, partition_keys, partition_starts, partition_ends, max_gap, min_overlap, type, ignore_strand, threads)
+}
+
