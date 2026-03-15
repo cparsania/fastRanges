@@ -17,7 +17,7 @@ NULL
   threads <- .normalize_threads(threads)
 
   if (inherits(subject, "fast_ranges_index")) {
-    idx <- subject
+    idx <- ._add_block_index_fields(subject)
     subject_n <- idx$subject_n
     seq_map <- idx$seq_map
   } else {
@@ -107,6 +107,12 @@ fast_find_overlaps <- function(
     partition_keys = inputs$idx$partition_keys,
     partition_starts = inputs$idx$partition_starts,
     partition_ends = inputs$idx$partition_ends,
+    block_starts = inputs$idx$block_starts,
+    block_ends = inputs$idx$block_ends,
+    block_first_start = inputs$idx$block_first_start,
+    block_max_end = inputs$idx$block_max_end,
+    partition_block_starts = inputs$idx$partition_block_starts,
+    partition_block_ends = inputs$idx$partition_block_ends,
     max_gap = inputs$max_gap,
     min_overlap = inputs$min_overlap,
     type = inputs$type,
@@ -179,6 +185,12 @@ fast_count_overlaps <- function(
     partition_keys = inputs$idx$partition_keys,
     partition_starts = inputs$idx$partition_starts,
     partition_ends = inputs$idx$partition_ends,
+    block_starts = inputs$idx$block_starts,
+    block_ends = inputs$idx$block_ends,
+    block_first_start = inputs$idx$block_first_start,
+    block_max_end = inputs$idx$block_max_end,
+    partition_block_starts = inputs$idx$partition_block_starts,
+    partition_block_ends = inputs$idx$partition_block_ends,
     max_gap = inputs$max_gap,
     min_overlap = inputs$min_overlap,
     type = inputs$type,

@@ -1,3 +1,63 @@
+._add_block_index_fields <- function(index) {
+  if (!is.null(index$block_starts) &&
+      !is.null(index$block_ends) &&
+      !is.null(index$block_first_start) &&
+      !is.null(index$block_max_end) &&
+      !is.null(index$partition_block_starts) &&
+      !is.null(index$partition_block_ends)) {
+    return(index)
+  }
+
+  block_size <- 2048L
+  partition_starts <- as.integer(index$partition_starts)
+  partition_ends <- as.integer(index$partition_ends)
+  subject_start <- as.integer(index$subject_start)
+  subject_end <- as.integer(index$subject_end)
+
+  block_starts <- integer()
+  block_ends <- integer()
+  block_first_start <- integer()
+  block_max_end <- integer()
+  partition_block_starts <- integer(length(partition_starts))
+  partition_block_ends <- integer(length(partition_starts))
+
+  next_block <- 1L
+  for (i in seq_along(partition_starts)) {
+    p_start <- partition_starts[[i]]
+    p_end <- partition_ends[[i]]
+    starts <- seq.int(p_start, p_end, by = block_size)
+    ends <- pmin.int(starts + block_size - 1L, p_end)
+    n_blocks <- length(starts)
+    if (n_blocks == 0L) {
+      partition_block_starts[[i]] <- 1L
+      partition_block_ends[[i]] <- 0L
+      next
+    }
+    max_end <- vapply(
+      seq_len(n_blocks),
+      function(j) max(subject_end[starts[[j]]:ends[[j]]]),
+      integer(1)
+    )
+    idx <- seq.int(next_block, length.out = n_blocks)
+    partition_block_starts[[i]] <- idx[[1]]
+    partition_block_ends[[i]] <- idx[[length(idx)]]
+    next_block <- next_block + n_blocks
+    block_starts <- c(block_starts, starts)
+    block_ends <- c(block_ends, ends)
+    block_first_start <- c(block_first_start, subject_start[starts])
+    block_max_end <- c(block_max_end, max_end)
+  }
+
+  index$block_size <- as.integer(block_size)
+  index$block_starts <- as.integer(block_starts)
+  index$block_ends <- as.integer(block_ends)
+  index$block_first_start <- as.integer(block_first_start)
+  index$block_max_end <- as.integer(block_max_end)
+  index$partition_block_starts <- as.integer(partition_block_starts)
+  index$partition_block_ends <- as.integer(partition_block_ends)
+  index
+}
+
 #' Save a Reusable Subject Index
 #'
 #' Save a `fast_ranges_index` object to disk for reuse across sessions.
@@ -82,6 +142,7 @@ fast_load_index <- function(path) {
     )
   }
 
+  index <- ._add_block_index_fields(index)
   index
 }
 
@@ -121,6 +182,7 @@ fast_index_stats <- function(index, detailed = FALSE) {
   summary_df <- S4Vectors::DataFrame(
     subject_n = as.integer(index$subject_n),
     partition_n = as.integer(partition_n),
+    block_n = as.integer(length(index$block_starts %||% integer())),
     seqlevel_n = as.integer(length(index$seq_map)),
     mean_partition_size = as.numeric(mean_partition_size),
     index_size_mb = as.numeric(utils::object.size(index)) / (1024^2)
@@ -147,8 +209,11 @@ fast_index_stats <- function(index, detailed = FALSE) {
       partition_start = as.integer(index$partition_starts),
       partition_end = as.integer(index$partition_ends),
       n_ranges = as.integer(index$partition_ends - index$partition_starts + 1L),
+      block_start = as.integer(index$partition_block_starts %||% integer(length(index$partition_keys))),
+      block_end = as.integer(index$partition_block_ends %||% integer(length(index$partition_keys))),
       stringsAsFactors = FALSE
     )
+    partition_df$n_blocks <- pmax.int(0L, partition_df$block_end - partition_df$block_start + 1L)
   }
 
   list(summary = summary_df, partitions = partition_df)

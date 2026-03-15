@@ -98,6 +98,12 @@ Rcpp::List cpp_find_overlaps_indexed(
     const Rcpp::IntegerVector& partition_keys,
     const Rcpp::IntegerVector& partition_starts,
     const Rcpp::IntegerVector& partition_ends,
+    const Rcpp::IntegerVector& block_starts,
+    const Rcpp::IntegerVector& block_ends,
+    const Rcpp::IntegerVector& block_first_start,
+    const Rcpp::IntegerVector& block_max_end,
+    const Rcpp::IntegerVector& partition_block_starts,
+    const Rcpp::IntegerVector& partition_block_ends,
     const int max_gap,
     const int min_overlap,
     const std::string type,
@@ -116,6 +122,15 @@ Rcpp::List cpp_find_overlaps_indexed(
   }
   if (partition_starts.size() != partition_ends.size() || partition_keys.size() != partition_starts.size()) {
     Rcpp::stop("Partition vectors must have equal length");
+  }
+  if (block_starts.size() != block_ends.size() ||
+      block_starts.size() != block_first_start.size() ||
+      block_starts.size() != block_max_end.size()) {
+    Rcpp::stop("Block vectors must have equal length");
+  }
+  if (partition_block_starts.size() != partition_keys.size() ||
+      partition_block_ends.size() != partition_keys.size()) {
+    Rcpp::stop("Partition block vectors must match partition count");
   }
   if (max_gap < -1) {
     Rcpp::stop("`max_gap` must be >= -1");
@@ -161,7 +176,7 @@ Rcpp::List cpp_find_overlaps_indexed(
   const int min_chunk_size = 8192;
   const int target_chunks_per_thread = 4;
 
-  std::vector< std::vector<int> > query_left_starts(n_partitions);
+  std::vector< std::vector<int> > query_left_blocks(n_partitions);
   std::vector<Task> tasks;
   tasks.reserve(n_partitions * 4);
 
@@ -177,24 +192,24 @@ Rcpp::List cpp_find_overlaps_indexed(
       return lhs < rhs;
     });
 
-    const int s_begin = partition_starts[part] - 1;
-    const int s_end_idx = partition_ends[part] - 1;
-    std::vector<int>& left_starts = query_left_starts[static_cast<std::size_t>(part)];
-    left_starts.resize(q_idx.size());
+    const int b_begin = partition_block_starts[part] - 1;
+    const int b_end_idx = partition_block_ends[part] - 1;
+    std::vector<int>& left_blocks = query_left_blocks[static_cast<std::size_t>(part)];
+    left_blocks.resize(q_idx.size());
 
-    if (s_begin < 0 || s_end_idx < s_begin) {
-      std::fill(left_starts.begin(), left_starts.end(), s_end_idx + 1);
+    if (b_begin < 0 || b_end_idx < b_begin) {
+      std::fill(left_blocks.begin(), left_blocks.end(), b_end_idx + 1);
     } else {
-      int left = s_begin;
+      int left = b_begin;
       for (std::size_t q_pos = 0; q_pos < q_idx.size(); ++q_pos) {
         const int qi = q_idx[q_pos];
         const int ql = q_start[qi];
-        while (left <= s_end_idx &&
-               static_cast<long long>(s_end[left]) <
+        while (left <= b_end_idx &&
+               static_cast<long long>(block_max_end[left]) <
                  (static_cast<long long>(ql) - scan_gap - scan_pad)) {
           ++left;
         }
-        left_starts[q_pos] = left;
+        left_blocks[q_pos] = left;
       }
     }
 
@@ -223,15 +238,15 @@ Rcpp::List cpp_find_overlaps_indexed(
   auto process_task = [&](const std::size_t task_id) {
     const Task& task = tasks[task_id];
     const int part = task.part;
-    const int s_begin = partition_starts[part] - 1;
-    const int s_end_idx = partition_ends[part] - 1;
+    const int b_begin = partition_block_starts[part] - 1;
+    const int b_end_idx = partition_block_ends[part] - 1;
 
-    if (s_begin < 0 || s_end_idx < s_begin) {
+    if (b_begin < 0 || b_end_idx < b_begin) {
       return;
     }
 
     const std::vector<int>& q_idx = query_partitions[static_cast<std::size_t>(part)];
-    const std::vector<int>& left_starts = query_left_starts[static_cast<std::size_t>(part)];
+    const std::vector<int>& left_blocks = query_left_blocks[static_cast<std::size_t>(part)];
     std::vector<int>& q_hits = out_query[task_id];
     std::vector<int>& s_hits = out_subject[task_id];
 
@@ -239,27 +254,39 @@ Rcpp::List cpp_find_overlaps_indexed(
       const int qi = q_idx[static_cast<std::size_t>(q_pos)];
       const int ql = q_start[qi];
       const int qr = q_end[qi];
-      const int left = left_starts[static_cast<std::size_t>(q_pos)];
-      if (left > s_end_idx) {
+      const int left_block = left_blocks[static_cast<std::size_t>(q_pos)];
+      if (left_block > b_end_idx) {
         continue;
       }
 
-      for (int sj = left; sj <= s_end_idx; ++sj) {
-        if (static_cast<long long>(s_start[sj]) >
+      for (int bi = left_block; bi <= b_end_idx; ++bi) {
+        if (static_cast<long long>(block_first_start[bi]) >
               (static_cast<long long>(qr) + scan_gap + scan_pad)) {
           break;
         }
+        const int sj_begin = block_starts[bi] - 1;
+        const int sj_end_idx = block_ends[bi] - 1;
+        for (int sj = sj_begin; sj <= sj_end_idx; ++sj) {
+          if (static_cast<long long>(s_end[sj]) <
+                (static_cast<long long>(ql) - scan_gap - scan_pad)) {
+            continue;
+          }
+          if (static_cast<long long>(s_start[sj]) >
+                (static_cast<long long>(qr) + scan_gap + scan_pad)) {
+            break;
+          }
 
-        if (!strand_compatible(q_strand[qi], s_strand[sj], ignore_strand)) {
-          continue;
+          if (!strand_compatible(q_strand[qi], s_strand[sj], ignore_strand)) {
+            continue;
+          }
+
+          if (!interval_match(ql, qr, s_start[sj], s_end[sj], max_gap, min_overlap, type_id)) {
+            continue;
+          }
+
+          q_hits.push_back(qi + 1);
+          s_hits.push_back(s_original[sj]);
         }
-
-        if (!interval_match(ql, qr, s_start[sj], s_end[sj], max_gap, min_overlap, type_id)) {
-          continue;
-        }
-
-        q_hits.push_back(qi + 1);
-        s_hits.push_back(s_original[sj]);
       }
     }
   };
@@ -346,6 +373,12 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
     const Rcpp::IntegerVector& partition_keys,
     const Rcpp::IntegerVector& partition_starts,
     const Rcpp::IntegerVector& partition_ends,
+    const Rcpp::IntegerVector& block_starts,
+    const Rcpp::IntegerVector& block_ends,
+    const Rcpp::IntegerVector& block_first_start,
+    const Rcpp::IntegerVector& block_max_end,
+    const Rcpp::IntegerVector& partition_block_starts,
+    const Rcpp::IntegerVector& partition_block_ends,
     const int max_gap,
     const int min_overlap,
     const std::string type,
@@ -363,6 +396,15 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
   }
   if (partition_starts.size() != partition_ends.size() || partition_keys.size() != partition_starts.size()) {
     Rcpp::stop("Partition vectors must have equal length");
+  }
+  if (block_starts.size() != block_ends.size() ||
+      block_starts.size() != block_first_start.size() ||
+      block_starts.size() != block_max_end.size()) {
+    Rcpp::stop("Block vectors must have equal length");
+  }
+  if (partition_block_starts.size() != partition_keys.size() ||
+      partition_block_ends.size() != partition_keys.size()) {
+    Rcpp::stop("Partition block vectors must match partition count");
   }
   if (max_gap < -1) {
     Rcpp::stop("`max_gap` must be >= -1");
@@ -405,7 +447,7 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
     int q_end;
   };
 
-  std::vector< std::vector<int> > query_left_starts(n_partitions);
+  std::vector< std::vector<int> > query_left_blocks(n_partitions);
   std::vector<Task> tasks;
   tasks.reserve(n_partitions * 4);
 
@@ -421,24 +463,24 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
       return lhs < rhs;
     });
 
-    const int s_begin = partition_starts[part] - 1;
-    const int s_end_idx = partition_ends[part] - 1;
-    std::vector<int>& left_starts = query_left_starts[static_cast<std::size_t>(part)];
-    left_starts.resize(q_idx.size());
+    const int b_begin = partition_block_starts[part] - 1;
+    const int b_end_idx = partition_block_ends[part] - 1;
+    std::vector<int>& left_blocks = query_left_blocks[static_cast<std::size_t>(part)];
+    left_blocks.resize(q_idx.size());
 
-    if (s_begin < 0 || s_end_idx < s_begin) {
-      std::fill(left_starts.begin(), left_starts.end(), s_end_idx + 1);
+    if (b_begin < 0 || b_end_idx < b_begin) {
+      std::fill(left_blocks.begin(), left_blocks.end(), b_end_idx + 1);
     } else {
-      int left = s_begin;
+      int left = b_begin;
       for (std::size_t q_pos = 0; q_pos < q_idx.size(); ++q_pos) {
         const int qi = q_idx[q_pos];
         const int ql = q_start[qi];
-        while (left <= s_end_idx &&
-               static_cast<long long>(s_end[left]) <
+        while (left <= b_end_idx &&
+               static_cast<long long>(block_max_end[left]) <
                  (static_cast<long long>(ql) - scan_gap - scan_pad)) {
           ++left;
         }
-        left_starts[q_pos] = left;
+        left_blocks[q_pos] = left;
       }
     }
 
@@ -461,40 +503,52 @@ Rcpp::IntegerVector cpp_count_overlaps_indexed(
   auto process_task = [&](const std::size_t task_id) {
     const Task& task = tasks[task_id];
     const int part = task.part;
-    const int s_begin = partition_starts[part] - 1;
-    const int s_end_idx = partition_ends[part] - 1;
-    if (s_begin < 0 || s_end_idx < s_begin) {
+    const int b_begin = partition_block_starts[part] - 1;
+    const int b_end_idx = partition_block_ends[part] - 1;
+    if (b_begin < 0 || b_end_idx < b_begin) {
       return;
     }
 
     const std::vector<int>& q_idx = query_partitions[static_cast<std::size_t>(part)];
-    const std::vector<int>& left_starts = query_left_starts[static_cast<std::size_t>(part)];
+    const std::vector<int>& left_blocks = query_left_blocks[static_cast<std::size_t>(part)];
 
     for (int q_pos = task.q_begin; q_pos < task.q_end; ++q_pos) {
       const int qi = q_idx[static_cast<std::size_t>(q_pos)];
       const int ql = q_start[qi];
       const int qr = q_end[qi];
-      const int left = left_starts[static_cast<std::size_t>(q_pos)];
-      if (left > s_end_idx) {
+      const int left_block = left_blocks[static_cast<std::size_t>(q_pos)];
+      if (left_block > b_end_idx) {
         counts[qi] = 0;
         continue;
       }
 
       int count = 0;
-      for (int sj = left; sj <= s_end_idx; ++sj) {
-        if (static_cast<long long>(s_start[sj]) >
+      for (int bi = left_block; bi <= b_end_idx; ++bi) {
+        if (static_cast<long long>(block_first_start[bi]) >
               (static_cast<long long>(qr) + scan_gap + scan_pad)) {
           break;
         }
+        const int sj_begin = block_starts[bi] - 1;
+        const int sj_end_idx = block_ends[bi] - 1;
+        for (int sj = sj_begin; sj <= sj_end_idx; ++sj) {
+          if (static_cast<long long>(s_end[sj]) <
+                (static_cast<long long>(ql) - scan_gap - scan_pad)) {
+            continue;
+          }
+          if (static_cast<long long>(s_start[sj]) >
+                (static_cast<long long>(qr) + scan_gap + scan_pad)) {
+            break;
+          }
 
-        if (!strand_compatible(q_strand[qi], s_strand[sj], ignore_strand)) {
-          continue;
-        }
-        if (!interval_match(ql, qr, s_start[sj], s_end[sj], max_gap, min_overlap, type_id)) {
-          continue;
-        }
+          if (!strand_compatible(q_strand[qi], s_strand[sj], ignore_strand)) {
+            continue;
+          }
+          if (!interval_match(ql, qr, s_start[sj], s_end[sj], max_gap, min_overlap, type_id)) {
+            continue;
+          }
 
-        ++count;
+          ++count;
+        }
       }
       counts[qi] = count;
     }

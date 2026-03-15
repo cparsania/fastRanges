@@ -26,7 +26,7 @@
 fast_build_index <- function(subject) {
   .assert_supported_ranges(subject, "subject")
 
-  sorted <- .build_sorted_subject_vectors(subject)
+  sorted <- ._add_block_index_fields(.build_sorted_subject_vectors(subject))
   structure(
     c(sorted, list(
       subject_n = length(subject),

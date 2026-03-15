@@ -19,3 +19,4 @@
 /.quarto/
 **/*.quarto_ipynb
 vignettes/benchmark_bioc.qmd
+inst/benchmarks/benchmark_encode/encode_chipseq_manifest.csv
