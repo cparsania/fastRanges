@@ -1,0 +1,181 @@
+# fastRanges
+
+[![R-CMD-check](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml)
+[![Codecov test
+coverage](https://codecov.io/gh/cparsania/fastRanges/branch/main/graph/badge.svg)](https://app.codecov.io/gh/cparsania/fastRanges)
+[![pkgdown
+site](https://img.shields.io/badge/pkgdown-site-blue)](https://cparsania.github.io/fastRanges/)
+[![Bioconductor](https://img.shields.io/badge/Bioconductor-coming_soon-lightgrey)](https://bioconductor.org/)
+
+`fastRanges` is a multithreaded interval engine for `IRanges` and
+`GRanges`. It keeps Bioconductor-style overlap semantics and familiar
+argument grammar while targeting the workloads that usually dominate
+runtime in genomics: large
+[`findOverlaps()`](https://rdrr.io/pkg/IRanges/man/findOverlaps-methods.html)
+jobs, repeated query batches against one subject, and overlap-derived
+summaries such as counts, joins, and aggregation.
+
+Website: <https://cparsania.github.io/fastRanges/>  
+Source: <https://github.com/cparsania/fastRanges>
+
+## Installation
+
+### Bioconductor
+
+``` r
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("fastRanges")
+```
+
+### GitHub
+
+``` r
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+remotes::install_github("cparsania/fastRanges", ref = "main")
+```
+
+## Quick Start
+
+``` r
+library(fastRanges)
+library(GenomicRanges)
+
+data("fast_ranges_example", package = "fastRanges")
+query <- fast_ranges_example$query
+subject <- fast_ranges_example$subject
+
+# One-off overlap call
+hits <- fast_find_overlaps(query, subject, threads = 4)
+
+# Repeated-query workflow
+subject_index <- fast_build_index(subject)
+hits_indexed <- fast_find_overlaps(query, subject_index, threads = 4)
+
+# Derived summaries
+counts <- fast_count_overlaps(query, subject_index, threads = 4)
+joined <- fast_overlap_join(query, subject, threads = 4)
+```
+
+The package ships a small in-memory example object and matching BED
+files:
+
+``` r
+data("fast_ranges_example", package = "fastRanges")
+names(fast_ranges_example)
+
+system.file("extdata", "query_peaks.bed", package = "fastRanges")
+system.file("extdata", "subject_genes.bed", package = "fastRanges")
+```
+
+## Function Grammar
+
+### Overlap Grammar
+
+- [`fast_find_overlaps()`](https://cparsania.github.io/fastRanges/reference/fast_find_overlaps.md):
+  return overlap pairs as `Hits`
+- [`fast_count_overlaps()`](https://cparsania.github.io/fastRanges/reference/fast_count_overlaps.md):
+  per-query overlap counts
+- [`fast_overlaps_any()`](https://cparsania.github.io/fastRanges/reference/fast_overlaps_any.md):
+  per-query logical overlap flag
+- [`fast_build_index()`](https://cparsania.github.io/fastRanges/reference/fast_build_index.md):
+  build a reusable subject index
+
+### Join Grammar
+
+- [`fast_overlap_join()`](https://cparsania.github.io/fastRanges/reference/fast_overlap_join.md):
+  overlap join with `join = "inner"` or `"left"`
+- [`fast_inner_overlap_join()`](https://cparsania.github.io/fastRanges/reference/fast_inner_overlap_join.md),
+  [`fast_left_overlap_join()`](https://cparsania.github.io/fastRanges/reference/fast_left_overlap_join.md)
+- [`fast_semi_overlap_join()`](https://cparsania.github.io/fastRanges/reference/fast_semi_overlap_join.md),
+  [`fast_anti_overlap_join()`](https://cparsania.github.io/fastRanges/reference/fast_anti_overlap_join.md)
+
+### Nearest Grammar
+
+- [`fast_nearest()`](https://cparsania.github.io/fastRanges/reference/fast_nearest.md),
+  [`fast_distance_to_nearest()`](https://cparsania.github.io/fastRanges/reference/fast_distance_to_nearest.md)
+- [`fast_precede()`](https://cparsania.github.io/fastRanges/reference/fast_precede.md),
+  [`fast_follow()`](https://cparsania.github.io/fastRanges/reference/fast_follow.md)
+
+### Summary Grammar
+
+- [`fast_count_overlaps_by_group()`](https://cparsania.github.io/fastRanges/reference/fast_count_overlaps_by_group.md)
+- [`fast_overlap_aggregate()`](https://cparsania.github.io/fastRanges/reference/fast_overlap_aggregate.md)
+- [`fast_window_count_overlaps()`](https://cparsania.github.io/fastRanges/reference/fast_window_count_overlaps.md)
+- [`fast_self_overlaps()`](https://cparsania.github.io/fastRanges/reference/fast_self_overlaps.md),
+  [`fast_cluster_overlaps()`](https://cparsania.github.io/fastRanges/reference/fast_cluster_overlaps.md)
+
+### Range Grammar
+
+- [`fast_reduce()`](https://cparsania.github.io/fastRanges/reference/fast_reduce.md),
+  [`fast_disjoin()`](https://cparsania.github.io/fastRanges/reference/fast_disjoin.md),
+  [`fast_gaps()`](https://cparsania.github.io/fastRanges/reference/fast_gaps.md)
+- [`fast_range_union()`](https://cparsania.github.io/fastRanges/reference/fast_range_union.md),
+  [`fast_range_intersect()`](https://cparsania.github.io/fastRanges/reference/fast_range_intersect.md),
+  [`fast_range_setdiff()`](https://cparsania.github.io/fastRanges/reference/fast_range_setdiff.md)
+
+### Coverage Grammar
+
+- [`fast_coverage()`](https://cparsania.github.io/fastRanges/reference/fast_coverage.md)
+- [`fast_tile_coverage()`](https://cparsania.github.io/fastRanges/reference/fast_tile_coverage.md)
+
+### Index and Iteration Grammar
+
+- [`fast_save_index()`](https://cparsania.github.io/fastRanges/reference/fast_save_index.md),
+  [`fast_load_index()`](https://cparsania.github.io/fastRanges/reference/fast_load_index.md),
+  [`fast_index_stats()`](https://cparsania.github.io/fastRanges/reference/fast_index_stats.md)
+- [`fast_find_overlaps_iter()`](https://cparsania.github.io/fastRanges/reference/fast_find_overlaps_iter.md)
+- [`fast_iter_has_next()`](https://cparsania.github.io/fastRanges/reference/fast_iter_has_next.md),
+  [`fast_iter_next()`](https://cparsania.github.io/fastRanges/reference/fast_iter_next.md)
+- [`fast_iter_reset()`](https://cparsania.github.io/fastRanges/reference/fast_iter_reset.md),
+  [`fast_iter_collect()`](https://cparsania.github.io/fastRanges/reference/fast_iter_collect.md)
+
+## Benchmark Highlights
+
+Saved benchmark results on a 96-core Linux server show:
+
+- about `5.19x` to `5.40x` `GRanges` speedup for indexed `fastRanges`
+  versus
+  [`GenomicRanges::findOverlaps()`](https://rdrr.io/pkg/IRanges/man/findOverlaps-methods.html)
+- about `4.90x` speedup in repeated-query workloads when the subject
+  index is reused
+- continued scaling on dense `GRanges` and large `IRanges` workloads
+- retained gains in grouped counting and overlap aggregation
+
+| GRanges speedup vs baseline                                                                                                                              | Repeated-query speedup                                                                                                                                       |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_gr_speedup_bar.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_repeat_speedup_bar.png) |
+
+| Dense GRanges scaling                                                                                                                                        | IRanges absolute runtime                                                                                                                                      |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_ir_absolute_runtime.png) |
+
+Benchmark resources:
+
+- [Benchmark
+  summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
+- [Benchmark
+  runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/01/benchmark_bioc.qmd)
+- [Benchmark interpretation
+  report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/01/benchmark_result_interpretation.qmd)
+- [Conference presentation
+  deck](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/01/benchmark_presentation.qmd)
+
+## Practical Use
+
+- Use direct mode for one-off overlap calls.
+- Use `fast_build_index(subject)` when the same annotation is queried
+  many times.
+- Use higher `threads` for large workloads on multicore machines.
+- Keep `deterministic = TRUE` when stable output ordering matters.
+
+## Documentation
+
+- [Pkgdown site](https://cparsania.github.io/fastRanges/)
+- [Getting started
+  vignette](https://cparsania.github.io/fastRanges/articles/fastRanges.html)
+- [Benchmark
+  summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
