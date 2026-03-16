@@ -4,11 +4,11 @@ This document is a compact, GitHub-friendly summary of the saved benchmark
 results for `fastRanges`. It is intended for quick reading. The full narrative
 report with additional plots and code is available in:
 
-- `inst/benchmarks/benchmark_result_interpretation.qmd`
-- `inst/benchmarks/benchmark_result_interpretation.html`
+- `inst/benchmarks/01/benchmark_result_interpretation.qmd`
+- `inst/benchmarks/01/benchmark_result_interpretation.html`
 
 The figures below were generated from the saved tables in
-`inst/benchmarks/benchmark_result/results`.
+`inst/benchmarks/01/benchmark_result/results`.
 
 ## Benchmark Context
 
@@ -54,7 +54,7 @@ The main message is simple: the indexed `fastRanges` path is the fastest in
 every saved scenario, and the gap widens rather than disappears at larger input
 sizes.
 
-![](benchmark_result/figures_interpretation/interpret_gr_runtime_bar.png)
+![](01/benchmark_result/figures_interpretation/interpret_gr_runtime_bar.png)
 
 Interpretation:
 
@@ -69,7 +69,7 @@ Interpretation:
 Absolute runtime is useful, but relative speedup makes the effect size easier
 to communicate in a paper.
 
-![](benchmark_result/figures_interpretation/interpret_gr_speedup_bar.png)
+![](01/benchmark_result/figures_interpretation/interpret_gr_speedup_bar.png)
 
 Interpretation:
 
@@ -87,9 +87,9 @@ important because the original end-to-end `GRanges` panel mainly answered
 "which engine is fastest?" but did not isolate how much extra threading helps
 once overlap density increases.
 
-![](benchmark_result/figures_interpretation/interpret_gr_scaling_runtime.png)
+![](01/benchmark_result/figures_interpretation/interpret_gr_scaling_runtime.png)
 
-![](benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png)
+![](01/benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png)
 
 Interpretation:
 
@@ -109,9 +109,9 @@ This is one of the most important practical use cases in genomics: the same
 subject annotation is queried repeatedly across many batches, samples, or
 resamples.
 
-![](benchmark_result/figures_interpretation/interpret_repeat_runtime_bar.png)
+![](01/benchmark_result/figures_interpretation/interpret_repeat_runtime_bar.png)
 
-![](benchmark_result/figures_interpretation/interpret_repeat_speedup_bar.png)
+![](01/benchmark_result/figures_interpretation/interpret_repeat_speedup_bar.png)
 
 Interpretation:
 
@@ -127,9 +127,9 @@ Interpretation:
 The large `IRanges` benchmark isolates the interval engine more directly and
 shows how performance changes with thread count.
 
-![](benchmark_result/figures_interpretation/interpret_ir_speedup_line.png)
+![](01/benchmark_result/figures_interpretation/interpret_ir_speedup_line.png)
 
-![](benchmark_result/figures_interpretation/interpret_ir_absolute_runtime.png)
+![](01/benchmark_result/figures_interpretation/interpret_ir_absolute_runtime.png)
 
 Interpretation:
 
@@ -148,9 +148,9 @@ Interpretation:
 One concern with fast overlap engines is that the gain may disappear in
 downstream summaries. The saved results do not support that concern.
 
-![](benchmark_result/figures_interpretation/interpret_derived_runtime_bar.png)
+![](01/benchmark_result/figures_interpretation/interpret_derived_runtime_bar.png)
 
-![](benchmark_result/figures_interpretation/interpret_derived_speedup_dot.png)
+![](01/benchmark_result/figures_interpretation/interpret_derived_speedup_dot.png)
 
 Interpretation:
 
@@ -184,15 +184,15 @@ workflow engine rather than only as a faster replacement for one overlap call.
 
 ## Reproducibility
 
-- Saved result tables: `inst/benchmarks/benchmark_result/results`
-- Saved software versions: `inst/benchmarks/benchmark_result/results/package_versions.csv`
+- Saved result tables: `inst/benchmarks/01/benchmark_result/results`
+- Saved software versions: `inst/benchmarks/01/benchmark_result/results/package_versions.csv`
 - Full interpretation report:
-  `inst/benchmarks/benchmark_result_interpretation.qmd`
+  `inst/benchmarks/01/benchmark_result_interpretation.qmd`
 - Main benchmark runner:
-  `inst/benchmarks/benchmark_bioc.qmd`
+  `inst/benchmarks/01/benchmark_bioc.qmd`
 
 To rerender the interpretation report:
 
 ```bash
-quarto render inst/benchmarks/benchmark_result_interpretation.qmd
+quarto render inst/benchmarks/01/benchmark_result_interpretation.qmd
 ```
