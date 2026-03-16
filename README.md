@@ -123,18 +123,18 @@ Saved benchmark results on a 96-core Linux server show:
 
 | GRanges speedup vs baseline | Repeated-query speedup |
 |---|---|
-| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_gr_speedup_bar.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_repeat_speedup_bar.png) |
+| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_gr_speedup_bar.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_repeat_speedup_bar.png) |
 
 | Dense GRanges scaling | IRanges absolute runtime |
 |---|---|
-| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/benchmark_result/figures_interpretation/interpret_ir_absolute_runtime.png) |
+| ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_gr_scaling_speedup.png) | ![](https://raw.githubusercontent.com/cparsania/fastRanges/main/inst/benchmarks/01/benchmark_result/figures_interpretation/interpret_ir_absolute_runtime.png) |
 
 Benchmark resources:
 
 - [Benchmark summary](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/README.md)
-- [Benchmark runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_bioc.qmd)
-- [Benchmark interpretation report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_result_interpretation.qmd)
-- [Conference presentation deck](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/benchmark_presentation.qmd)
+- [Benchmark runner](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/01/benchmark_bioc.qmd)
+- [Benchmark interpretation report](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/01/benchmark_result_interpretation.qmd)
+- [Conference presentation deck](https://github.com/cparsania/fastRanges/blob/main/inst/benchmarks/01/benchmark_presentation.qmd)
 
 ## Practical Use
 
