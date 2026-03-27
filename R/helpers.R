@@ -141,7 +141,9 @@
   IRanges::IRanges(start = start, end = end)
 }
 
+#' @template overlap_shared_args
 #' @keywords internal
+#' @noRd
 .find_overlaps_reference <- function(
     query,
     subject,
@@ -173,7 +175,9 @@
   )
 }
 
+#' @template overlap_shared_args
 #' @keywords internal
+#' @noRd
 .count_overlaps_reference <- function(
     query,
     subject,
