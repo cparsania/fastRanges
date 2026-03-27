@@ -1,4 +1,11 @@
 ._add_block_index_fields <- function(index) {
+  if (is.null(index$has_empty_ranges)) {
+    index$has_empty_ranges <- any((as.integer(index$subject_end) - as.integer(index$subject_start) + 1L) == 0L)
+  }
+  if (is.null(index$has_circular_sequences)) {
+    index$has_circular_sequences <- FALSE
+  }
+
   if (!is.null(index$block_starts) &&
       !is.null(index$block_ends) &&
       !is.null(index$block_first_start) &&

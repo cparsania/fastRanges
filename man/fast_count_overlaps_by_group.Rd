@@ -81,7 +81,11 @@ Use larger values on multicore machines when throughput matters.
 
 For repeated-query workloads, combine a prebuilt index from
 \code{fast_build_index(subject)} with a thread count chosen empirically on your
-hardware.}
+hardware.
+
+\code{fastRanges} is optimized for large and throughput-oriented workloads.
+For one-off or small jobs, Bioconductor's native overlap routines may be
+competitive.}
 
 \item{deterministic}{Logical scalar controlling output order.
 
@@ -89,7 +93,8 @@ hardware.}
 reports, and direct comparison across thread counts.
 
 \code{FALSE} allows the implementation to return hits in an unspecified order,
-which can be slightly faster for large jobs.}
+which can be noticeably faster for large multithreaded jobs because it
+avoids extra global ordering work.}
 
 \item{include_na_group}{Logical scalar. If \code{TRUE}, missing group values are
 counted as \code{"<NA>"} instead of being dropped.}

@@ -19,10 +19,12 @@ Imports:
     S4Vectors,
     IRanges,
     GenomicRanges,
+    GenomeInfoDb,
     Rcpp
 LinkingTo:
     Rcpp
 Suggests:
+    BiocStyle,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,

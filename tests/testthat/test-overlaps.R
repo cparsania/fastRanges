@@ -6,6 +6,35 @@ canon_hits <- function(h) {
   x[order(x[, 1], x[, 2]), , drop = FALSE]
 }
 
+validate_select_result <- function(selected, ref_all_hits, query_n, mode = c("first", "last", "arbitrary")) {
+  mode <- match.arg(mode)
+  expect_type(selected, "integer")
+  expect_length(selected, query_n)
+
+  qh <- S4Vectors::queryHits(ref_all_hits)
+  sh <- S4Vectors::subjectHits(ref_all_hits)
+  ref_choices <- split(sh, qh)
+  has_hit <- rep.int(FALSE, query_n)
+  if (length(ref_choices) > 0L) {
+    has_hit[as.integer(names(ref_choices))] <- TRUE
+  }
+
+  expect_identical(is.na(selected), !has_hit)
+
+  for (qid in which(has_hit)) {
+    choices <- ref_choices[[as.character(qid)]]
+    got <- selected[[qid]]
+    expect_false(is.na(got))
+    if (identical(mode, "first")) {
+      expect_identical(as.integer(got), as.integer(min(choices)))
+    } else if (identical(mode, "last")) {
+      expect_identical(as.integer(got), as.integer(max(choices)))
+    } else {
+      expect_true(got %in% choices)
+    }
+  }
+}
+
 test_that("fast_find_overlaps matches GenomicRanges for GRanges", {
   data(fast_ranges_example, package = "fastRanges")
   q <- fast_ranges_example$query
@@ -115,6 +144,46 @@ test_that("count and any wrappers agree with overlap hits", {
   expect_equal(any_hits, counts > 0L)
 })
 
+test_that("select semantics match GenomicRanges for GRanges", {
+  data(fast_ranges_example, package = "fastRanges")
+  q <- fast_ranges_example$query
+  s <- fast_ranges_example$subject
+  ref_all <- GenomicRanges::findOverlaps(q, s, ignore.strand = FALSE)
+
+  for (sel in c("first", "last")) {
+    ref <- GenomicRanges::findOverlaps(q, s, select = sel, ignore.strand = FALSE)
+    got <- fast_find_overlaps(q, s, select = sel, threads = 2)
+    expect_identical(got, ref)
+  }
+
+  got_arb <- fast_find_overlaps(q, s, select = "arbitrary", threads = 2)
+  validate_select_result(got_arb, ref_all, length(q), mode = "arbitrary")
+})
+
+test_that("select semantics match IRanges for IRanges inputs", {
+  q <- IRanges::IRanges(start = c(1, 10, 20, 40), width = c(5, 4, 3, 2))
+  s <- IRanges::IRanges(start = c(3, 9, 18, 41), width = c(4, 6, 5, 2))
+  ref_all <- IRanges::findOverlaps(q, s)
+
+  for (sel in c("first", "last")) {
+    ref <- IRanges::findOverlaps(q, s, select = sel)
+    got <- fast_find_overlaps(q, s, select = sel, threads = 2)
+    expect_identical(got, ref)
+  }
+
+  got_arb <- fast_find_overlaps(q, s, select = "arbitrary", threads = 2)
+  validate_select_result(got_arb, ref_all, length(q), mode = "arbitrary")
+})
+
+test_that("select returns NA for queries with no hits", {
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(1L, 100L), width = c(5L, 5L)))
+  s <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 3L, width = 2L))
+
+  got <- fast_find_overlaps(q, s, select = "first", threads = 2)
+
+  expect_identical(got, c(1L, NA_integer_))
+})
+
 test_that("within semantics with max_gap match GenomicRanges", {
   q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 10L, end = 20L))
   s <- GenomicRanges::GRanges(
@@ -219,6 +288,128 @@ test_that("empty GRanges inputs return empty-compatible outputs", {
   expect_length(h, 0L)
   expect_identical(as.integer(counts), integer())
   expect_identical(as.logical(any_hits), logical())
+})
+
+test_that("width-0 GRanges semantics match GenomicRanges for direct and indexed paths", {
+  q <- GenomicRanges::GRanges(
+    "chr1",
+    IRanges::IRanges(start = c(5L, 8L, 12L, 20L), end = c(4L, 10L, 11L, 23L))
+  )
+  s <- GenomicRanges::GRanges(
+    "chr1",
+    IRanges::IRanges(start = c(3L, 5L, 8L, 12L, 19L), end = c(6L, 4L, 10L, 11L, 21L))
+  )
+  idx <- fast_build_index(s)
+
+  ref_all <- GenomicRanges::findOverlaps(q, s)
+  got_direct <- fast_find_overlaps(q, s, threads = 2)
+  got_index <- fast_find_overlaps(q, idx, threads = 2)
+  expect_equal(canon_hits(got_direct), canon_hits(ref_all))
+  expect_equal(canon_hits(got_index), canon_hits(ref_all))
+
+  ref_first <- GenomicRanges::findOverlaps(q, s, select = "first")
+  ref_last <- GenomicRanges::findOverlaps(q, s, select = "last")
+  expect_identical(fast_find_overlaps(q, s, select = "first", threads = 2), ref_first)
+  expect_identical(fast_find_overlaps(q, idx, select = "first", threads = 2), ref_first)
+  expect_identical(fast_find_overlaps(q, s, select = "last", threads = 2), ref_last)
+  expect_identical(fast_find_overlaps(q, idx, select = "last", threads = 2), ref_last)
+
+  got_arb_direct <- fast_find_overlaps(q, s, select = "arbitrary", threads = 2)
+  got_arb_index <- fast_find_overlaps(q, idx, select = "arbitrary", threads = 2)
+  validate_select_result(got_arb_direct, ref_all, length(q), mode = "arbitrary")
+  validate_select_result(got_arb_index, ref_all, length(q), mode = "arbitrary")
+
+  ref_count <- GenomicRanges::countOverlaps(q, s)
+  expect_identical(as.integer(fast_count_overlaps(q, s, threads = 2)), as.integer(ref_count))
+  expect_identical(as.integer(fast_count_overlaps(q, idx, threads = 2)), as.integer(ref_count))
+  expect_identical(as.logical(fast_overlaps_any(q, s, threads = 2)), ref_count > 0L)
+  expect_identical(as.logical(fast_overlaps_any(q, idx, threads = 2)), ref_count > 0L)
+})
+
+test_that("width-0 IRanges semantics match IRanges for direct path", {
+  q <- IRanges::IRanges(start = c(5L, 8L, 12L, 20L), end = c(4L, 10L, 11L, 23L))
+  s <- IRanges::IRanges(start = c(3L, 5L, 8L, 12L, 19L), end = c(6L, 4L, 10L, 11L, 21L))
+  idx <- fast_build_index(s)
+
+  ref_all <- IRanges::findOverlaps(q, s)
+  got_direct <- fast_find_overlaps(q, s, threads = 2)
+  got_index <- fast_find_overlaps(q, idx, threads = 2)
+  expect_equal(canon_hits(got_direct), canon_hits(ref_all))
+  expect_equal(canon_hits(got_index), canon_hits(ref_all))
+
+  ref_first <- IRanges::findOverlaps(q, s, select = "first")
+  ref_last <- IRanges::findOverlaps(q, s, select = "last")
+  expect_identical(fast_find_overlaps(q, s, select = "first", threads = 2), ref_first)
+  expect_identical(fast_find_overlaps(q, idx, select = "first", threads = 2), ref_first)
+  expect_identical(fast_find_overlaps(q, s, select = "last", threads = 2), ref_last)
+  expect_identical(fast_find_overlaps(q, idx, select = "last", threads = 2), ref_last)
+
+  got_arb_direct <- fast_find_overlaps(q, s, select = "arbitrary", threads = 2)
+  got_arb_index <- fast_find_overlaps(q, idx, select = "arbitrary", threads = 2)
+  validate_select_result(got_arb_direct, ref_all, length(q), mode = "arbitrary")
+  validate_select_result(got_arb_index, ref_all, length(q), mode = "arbitrary")
+
+  ref_count <- IRanges::countOverlaps(q, s)
+  expect_identical(as.integer(fast_count_overlaps(q, s, threads = 2)), as.integer(ref_count))
+  expect_identical(as.integer(fast_count_overlaps(q, idx, threads = 2)), as.integer(ref_count))
+  expect_identical(as.logical(fast_overlaps_any(q, s, threads = 2)), ref_count > 0L)
+  expect_identical(as.logical(fast_overlaps_any(q, idx, threads = 2)), ref_count > 0L)
+})
+
+test_that("circular GRanges are rejected explicitly", {
+  si <- GenomeInfoDb::Seqinfo("chrC", seqlengths = 100L, isCircular = TRUE)
+  q <- suppressWarnings(GenomicRanges::GRanges("chrC", IRanges::IRanges(start = 95L, width = 10L), seqinfo = si))
+  s <- suppressWarnings(GenomicRanges::GRanges("chrC", IRanges::IRanges(start = 2L, width = 8L), seqinfo = si))
+
+  expect_error(
+    fast_find_overlaps(q, s, threads = 2),
+    "circular sequences, which are not currently supported"
+  )
+  expect_error(
+    fast_count_overlaps(q, s, threads = 2),
+    "circular sequences, which are not currently supported"
+  )
+  expect_error(
+    fast_build_index(s),
+    "circular sequences, which are not currently supported"
+  )
+})
+
+test_that("indexed subject with circular flag is rejected explicitly", {
+  s <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(1L, 10L), width = 5L))
+  q <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(2L, 12L), width = 3L))
+  idx <- fast_build_index(s)
+  idx$has_circular_sequences <- TRUE
+
+  expect_error(
+    fast_find_overlaps(q, idx, threads = 2),
+    "circular sequences, which are not currently supported"
+  )
+  expect_error(
+    fast_count_overlaps(q, idx, threads = 2),
+    "circular sequences, which are not currently supported"
+  )
+})
+
+test_that("GRangesList is rejected explicitly", {
+  q <- GenomicRanges::GRangesList(
+    a = GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(1L, 10L), width = c(3L, 4L))),
+    b = GenomicRanges::GRanges("chr1", IRanges::IRanges(start = 20L, width = 5L))
+  )
+  s <- GenomicRanges::GRanges("chr1", IRanges::IRanges(start = c(2L, 12L, 19L), width = c(2L, 3L, 4L)))
+
+  expect_error(
+    fast_find_overlaps(q, s, threads = 2),
+    "GRangesList is not currently supported"
+  )
+  expect_error(
+    fast_count_overlaps(q, s, threads = 2),
+    "GRangesList is not currently supported"
+  )
+  expect_error(
+    fast_build_index(q),
+    "GRangesList is not currently supported"
+  )
 })
 
 test_that("single-range no-hit cases match GenomicRanges", {

@@ -7,6 +7,7 @@
 fast_find_overlaps(
   query,
   subject,
+  select = c("all", "first", "last", "arbitrary"),
   max_gap = -1L,
   min_overlap = 0L,
   type = c("any", "start", "end", "within", "equal"),
@@ -21,6 +22,14 @@ fast_find_overlaps(
 \item{subject}{An \code{IRanges}/\code{GRanges} object or a \code{fast_ranges_index}.
 Use \code{fast_build_index(subject)} when the same subject is reused across
 many overlap queries.}
+
+\item{select}{Character scalar controlling whether all hits are returned or
+a single subject match is selected per query.
+
+Use \code{"all"} to return a \code{Hits} object.
+
+Use \code{"first"}, \code{"last"}, or \code{"arbitrary"} to return an integer vector
+with one selected subject index per query and \code{NA} for queries with no hit.}
 
 \item{max_gap}{Integer scalar controlling how far apart two ranges may be
 and still count as a hit.
@@ -76,7 +85,11 @@ Use larger values on multicore machines when throughput matters.
 
 For repeated-query workloads, combine a prebuilt index from
 \code{fast_build_index(subject)} with a thread count chosen empirically on your
-hardware.}
+hardware.
+
+\code{fastRanges} is optimized for large and throughput-oriented workloads.
+For one-off or small jobs, Bioconductor's native overlap routines may be
+competitive.}
 
 \item{deterministic}{Logical scalar controlling output order.
 
@@ -84,10 +97,14 @@ hardware.}
 reports, and direct comparison across thread counts.
 
 \code{FALSE} allows the implementation to return hits in an unspecified order,
-which can be slightly faster for large jobs.}
+which can be noticeably faster for large multithreaded jobs because it
+avoids extra global ordering work.}
 }
 \value{
-A \code{S4Vectors::Hits} object.
+If \code{select = "all"}, a \code{S4Vectors::Hits} object.
+
+Otherwise, an integer vector of length \code{length(query)} containing one
+selected subject index per query and \code{NA} when no subject matched.
 }
 \description{
 Compute overlap pairs between \code{query} and \code{subject} using a multithreaded
@@ -108,6 +125,33 @@ The return value is a \code{Hits} object. The important pieces are:
 
 If you need only counts or a yes/no answer, prefer \code{fast_count_overlaps()}
 or \code{fast_overlaps_any()}, because they return simpler summaries.
+
+Compatibility notes:
+
+\code{fastRanges} aims to stay close to Bioconductor overlap semantics for
+supported inputs, and its outputs are routinely validated against
+\code{IRanges::findOverlaps()} / \code{GenomicRanges::findOverlaps()}.
+
+Currently supported core input types are \code{IRanges} and \code{GRanges}.
+
+Empty-range semantics are delegated to Bioconductor-compatible reference
+behavior.
+
+Circular genomic sequences are not currently supported and will raise an
+explicit error.
+
+\code{GRangesList} inputs are not currently supported and will raise an explicit
+error.
+
+Performance notes:
+
+For one-off overlap calls, use the raw \code{subject}.
+
+For repeated-query or throughput-oriented workloads, build a reusable index
+once with \code{fast_build_index(subject)} and pass that index as \code{subject}.
+
+For maximum multithreaded throughput, consider \code{deterministic = FALSE} when
+output order is not important.
 }
 \section{Overlap semantics}{
 

@@ -1,0 +1,8 @@
+"engine","peakram_available","peak_ram_mb","elapsed_sec"
+"fastRanges_default",TRUE,4304.6,80.5299999999997
+"fastRanges_direct_t1_det_true",TRUE,3962,80.018
+"fastRanges_direct_tmax_det_false",TRUE,3962,10.9870000000001
+"fastRanges_indexed_t1_det_true",TRUE,3942.9,79.607
+"fastRanges_indexed_tmax_det_false",TRUE,3942.9,10.9189999999999
+"GenomicRanges_findOverlaps",TRUE,3954.3,35.8290000000002
+"GenomicRanges_GNCList",TRUE,3971.5,29.567

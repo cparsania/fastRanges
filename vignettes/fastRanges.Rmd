@@ -1,6 +1,8 @@
 ---
 title: "fastRanges: A Practical Introduction to Genomic Interval Analysis"
-output: rmarkdown::html_vignette
+output:
+  BiocStyle::html_document:
+    toc: true
 vignette: >
   %\VignetteIndexEntry{fastRanges: A Practical Introduction to Genomic Interval Analysis}
   %\VignetteEngine{knitr::rmarkdown}
@@ -33,6 +35,10 @@ Typical analyses ask questions such as:
 
 `fastRanges` is designed to answer those questions while keeping its grammar
 close to the Bioconductor overlap APIs in `IRanges` and `GenomicRanges`.
+
+The package is best thought of as a high-throughput interval engine for
+supported Bioconductor range classes rather than as a promise of full
+drop-in replacement for every `findOverlaps()` input type.
 
 ```{r setup}
 library(fastRanges)
@@ -240,6 +246,52 @@ identical(
   cbind(S4Vectors::queryHits(ref), S4Vectors::subjectHits(ref))
 )
 ```
+
+### What is currently supported?
+
+- `IRanges`
+- `GRanges`
+- overlap modes such as `"any"`, `"start"`, `"end"`, `"within"`, and `"equal"`
+- strand-aware or strand-ignored comparison for `GRanges`
+- `select = "all"`, `"first"`, `"last"`, and `"arbitrary"`
+
+### What is not currently supported?
+
+- `GRangesList`
+- circular genomic sequences
+
+For these unsupported cases, `fastRanges` now raises an explicit error rather
+than returning silently different answers.
+
+### Empty ranges
+
+Width-0 / empty-range cases are handled using Bioconductor-compatible
+reference behavior. This is a correctness choice: empty ranges are uncommon in
+production overlap workloads, so exact semantics are more important than
+forcing these cases through the multithreaded C++ path.
+
+### Direct vs indexed usage
+
+There are two intended usage modes:
+
+- Direct mode:
+  - `fast_find_overlaps(query, subject, ...)`
+  - best for one-off calls or exploratory work
+- Indexed mode:
+  - `idx <- fast_build_index(subject)`
+  - `fast_find_overlaps(query, idx, ...)`
+  - best when the same subject is queried repeatedly
+
+This distinction matters for performance much more than for semantics.
+
+### `deterministic`
+
+`deterministic = TRUE` keeps output ordering stable across thread counts and is
+useful for tests, reports, and exact reproducibility.
+
+`deterministic = FALSE` avoids that extra ordering step and is usually the
+right choice when you care about maximum throughput on large multithreaded
+jobs.
 
 That compatibility is important because `fastRanges` is designed to fit into
 existing `IRanges` / `GRanges` workflows rather than replace those classes.

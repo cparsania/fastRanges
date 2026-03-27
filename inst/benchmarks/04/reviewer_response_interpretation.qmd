@@ -1,0 +1,574 @@
+---
+title: "fastRanges Reviewer Response Assessment"
+subtitle: "Post hoc interpretation of reviewer_response_check.R outputs"
+format:
+  html:
+    toc: true
+    number-sections: true
+    code-fold: true
+    code-summary: "Show code"
+execute:
+  echo: true
+  warning: false
+  message: false
+params:
+  results_dir: "reviewer_response_results"
+  figures_dir: "reviewer_response_figures"
+---
+
+## Goal
+
+This report assesses the saved outputs produced by
+`inst/benchmarks/04/reviewer_response_check.R`. It is intended to answer the
+reviewer's concerns systematically using the recorded compatibility checks,
+timing summaries, preprocessing costs, and peak RAM measurements.
+
+Unlike the benchmark script itself, this document does not rerun the reviewer
+workload. It reads the saved CSV outputs, regenerates interpretation figures,
+and summarizes what the run demonstrates and what it does not.
+
+## Scope
+
+The reviewer raised five practical concerns:
+
+1. semantic differences from `findOverlaps()`
+2. default single-thread performance
+3. the effect of `deterministic`
+4. preprocessing/index construction cost
+5. memory usage
+
+The sections below follow that structure.
+
+## Setup
+
+```{r}
+required_pkgs <- c("ggplot2", "dplyr", "tidyr", "scales")
+missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_pkgs) > 0) {
+  stop("Missing required packages: ", paste(missing_pkgs, collapse = ", "))
+}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(scales)
+
+input_dir <- dirname(knitr::current_input())
+
+resolve_path <- function(path, mustWork = FALSE) {
+  candidates <- c(
+    path,
+    file.path(input_dir, path),
+    file.path(getwd(), path)
+  )
+  for (candidate in unique(candidates)) {
+    if (file.exists(candidate) || dir.exists(candidate)) {
+      return(normalizePath(candidate, winslash = "/", mustWork = mustWork))
+    }
+  }
+  normalizePath(file.path(input_dir, path), winslash = "/", mustWork = mustWork)
+}
+
+results_dir <- resolve_path(params$results_dir, mustWork = TRUE)
+figures_dir <- resolve_path(params$figures_dir, mustWork = FALSE)
+if (!dir.exists(figures_dir)) {
+  dir.create(figures_dir, recursive = TRUE)
+}
+
+read_tbl <- function(name) {
+  path <- file.path(results_dir, paste0(name, ".csv"))
+  if (!file.exists(path)) {
+    stop("Missing result table: ", path)
+  }
+  utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+save_plot <- function(plot, filename, width = 10, height = 6, dpi = 320) {
+  path <- file.path(figures_dir, filename)
+  ggplot2::ggsave(path, plot = plot, width = width, height = height, dpi = dpi)
+  path
+}
+
+theme_pub <- function() {
+  theme_bw(base_size = 13) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title.position = "plot",
+      legend.position = "bottom",
+      strip.background = element_rect(fill = "grey95"),
+      axis.text.x = element_text(color = "black"),
+      axis.text.y = element_text(color = "black")
+    )
+}
+
+label_engine <- function(x) {
+  x <- gsub("^GenomicRanges_findOverlaps$", "GenomicRanges::findOverlaps", x)
+  x <- gsub("^GenomicRanges_GNCList$", "GenomicRanges::findOverlaps(GNCList)", x)
+  x <- gsub("^fastRanges_default$", "fast_find_overlaps() default", x)
+  x <- gsub("^fastRanges_build_index$", "fast_build_index()", x)
+  x <- gsub("^GenomicRanges_GNCList_build$", "GNCList()", x)
+  x <- gsub("^fastRanges_direct", "fastRanges direct", x)
+  x <- gsub("^fastRanges_indexed", "fastRanges indexed", x)
+  x <- gsub("_t", " | t=", x)
+  x <- gsub("_det_", " | deterministic=", x)
+  x <- gsub("_false", "FALSE", x)
+  x <- gsub("_true", "TRUE", x)
+  x
+}
+
+parse_engine <- function(x) {
+  data.frame(
+    engine = x,
+    mode = dplyr::case_when(
+      grepl("^fastRanges_default$", x) ~ "default",
+      grepl("^fastRanges_direct", x) ~ "direct",
+      grepl("^fastRanges_indexed", x) ~ "indexed",
+      grepl("^GenomicRanges_findOverlaps$", x) ~ "findOverlaps",
+      grepl("^GenomicRanges_GNCList$", x) ~ "GNCList",
+      TRUE ~ "other"
+    ),
+    threads = dplyr::case_when(
+      grepl("_t1_", x) ~ 1L,
+      grepl("_t8_", x) ~ 8L,
+      grepl("_t96_", x) ~ 96L,
+      TRUE ~ NA_integer_
+    ),
+    deterministic = dplyr::case_when(
+      grepl("_det_true$", x) ~ "TRUE",
+      grepl("_det_false$", x) ~ "FALSE",
+      grepl("^fastRanges_default$", x) ~ "TRUE (default)",
+      TRUE ~ NA_character_
+    ),
+    stringsAsFactors = FALSE
+  )
+}
+
+run_meta <- read_tbl("run_metadata")
+pkg_versions <- read_tbl("package_versions")
+semantic <- read_tbl("semantic_checks")
+pre_raw <- read_tbl("preprocessing_raw")
+pre_summary <- read_tbl("preprocessing_summary")
+workload <- read_tbl("reviewer_workload")
+perf_raw <- read_tbl("performance_raw")
+perf_summary <- read_tbl("performance_summary")
+det_summary <- read_tbl("determinism_thread_summary")
+peak_ram <- read_tbl("peak_ram_summary")
+
+perf_aug <- perf_summary %>% left_join(parse_engine(perf_summary$engine), by = "engine")
+det_aug <- det_summary %>% left_join(parse_engine(det_summary$engine), by = "engine")
+peak_aug <- peak_ram %>% left_join(parse_engine(peak_ram$engine), by = "engine")
+
+semantic <- semantic %>%
+  mutate(
+    concern_label = c(
+      empty_ranges = "Empty ranges",
+      circular_sequences = "Circular sequences",
+      GRangesList_support = "GRangesList",
+      select_argument = "select="
+    )[concern],
+    status_label = case_when(
+      status %in% c("match", "supported") ~ "Acceptable",
+      status %in% c("unsupported_or_error", "missing") ~ "Explicit gap",
+      TRUE ~ "Mismatch"
+    )
+  )
+
+best_fast <- perf_summary %>%
+  filter(grepl("^fastRanges_", engine)) %>%
+  arrange(median_sec) %>%
+  slice(1)
+
+default_fast <- perf_summary %>% filter(engine == "fastRanges_default")
+baseline_gr <- perf_summary %>% filter(engine == "GenomicRanges_findOverlaps")
+baseline_gnc <- perf_summary %>% filter(engine == "GenomicRanges_GNCList")
+```
+
+## Run Context
+
+```{r}
+run_meta
+```
+
+```{r}
+pkg_versions
+```
+
+The recorded reviewer workload used:
+
+```{r}
+workload
+```
+
+This corresponds to:
+
+- `query_n = 3,000,000`
+- `subject_n = 1,000,000`
+- mean query width of about `255`
+- mean subject width of about `22,011`
+
+## Executive Assessment
+
+```{r}
+summary_table <- tibble::tibble(
+  question = c(
+    "Does this run show semantic parity with GenomicRanges?",
+    "Is default fastRanges behavior faster than findOverlaps()?",
+    "Is best-throughput fastRanges faster than findOverlaps()?",
+    "Is best-throughput fastRanges faster than GNCList()?",
+    "Is index construction expensive?",
+    "Does deterministic ordering materially affect throughput?"
+  ),
+  assessment = c(
+    "No. The saved run still reports circular mismatch and missing select=.",
+    sprintf("No. Default fastRanges median was %.3f sec vs %.3f sec for findOverlaps().",
+            default_fast$median_sec, baseline_gr$median_sec),
+    sprintf("Yes. Best fastRanges median was %.3f sec, a %.2fx speedup vs findOverlaps().",
+            best_fast$median_sec, best_fast$speedup_vs_baseline),
+    sprintf("Yes. Best fastRanges median was %.3f sec vs %.3f sec for GNCList().",
+            best_fast$median_sec, baseline_gnc$median_sec),
+    sprintf("No. fast_build_index() median was %.3f sec vs %.3f sec for GNCList() construction.",
+            pre_summary$median_sec[pre_summary$engine == "fastRanges_build_index"],
+            pre_summary$median_sec[pre_summary$engine == "GenomicRanges_GNCList_build"]),
+    "Yes. deterministic=TRUE largely removes the multithreading benefit in this run."
+  )
+)
+
+summary_table
+```
+
+The important constraint is that this result snapshot reflects the package state
+captured when `reviewer_response_check.R` was run. It is not automatically the
+same as the current branch state.
+
+## 1. Semantic Compatibility
+
+```{r}
+semantic %>%
+  select(concern_label, scenario, status, reference_supported, fastRanges_supported, message)
+```
+
+### Interpretation
+
+- Empty ranges matched the Bioconductor reference in this run.
+- Circular sequences did not match the reference in this run.
+- `GRangesList` was not supported in this run.
+- `select=` was missing in this run.
+
+That means this result set represents a pre-fix compatibility snapshot rather
+than a fully updated reviewer-response state.
+
+```{r}
+p_semantic <- ggplot(semantic, aes(x = concern_label, y = 1, fill = status_label)) +
+  geom_tile(color = "white", linewidth = 0.7) +
+  geom_text(aes(label = status), size = 4) +
+  scale_fill_manual(
+    values = c(
+      "Acceptable" = "#2A9D8F",
+      "Explicit gap" = "#E9C46A",
+      "Mismatch" = "#D1495B"
+    ),
+    drop = FALSE
+  ) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  labs(
+    title = "Semantic status recorded by reviewer_response_check.R",
+    subtitle = "This reflects the package state at the time of the captured run",
+    x = NULL,
+    fill = "Assessment"
+  ) +
+  theme_pub()
+
+p_semantic
+save_plot(p_semantic, "semantic_status_heatmap.png", width = 10, height = 3.8)
+```
+
+## 2. Preprocessing Cost
+
+```{r}
+pre_summary
+```
+
+The preprocessing result is straightforward:
+
+- `fast_build_index()` was faster than constructing `GNCList()`
+- the `fastRanges` index object was also smaller in this run
+
+```{r}
+p_pre_time <- ggplot(
+  pre_summary %>% mutate(engine_label = label_engine(engine)),
+  aes(x = reorder(engine_label, median_sec), y = median_sec, fill = engine_label)
+) +
+  geom_col(width = 0.72, show.legend = FALSE) +
+  geom_errorbar(aes(ymin = q25_sec, ymax = q75_sec), width = 0.14, linewidth = 0.6) +
+  coord_flip() +
+  scale_y_continuous(labels = label_number(accuracy = 0.001)) +
+  labs(
+    title = "Preprocessing runtime",
+    subtitle = "Median build time across iterations",
+    x = NULL,
+    y = "Median runtime (sec)"
+  ) +
+  theme_pub()
+
+p_pre_time
+save_plot(p_pre_time, "preprocessing_runtime.png", width = 8, height = 4.8)
+```
+
+```{r}
+p_pre_mem <- ggplot(
+  pre_raw %>% mutate(engine_label = label_engine(engine)),
+  aes(x = reorder(engine_label, object_size_mb), y = object_size_mb, fill = engine_label)
+) +
+  geom_col(width = 0.72, show.legend = FALSE) +
+  coord_flip() +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "Preprocessing object size",
+    subtitle = "Resident object size of the built index structure",
+    x = NULL,
+    y = "Object size (MB)"
+  ) +
+  theme_pub()
+
+p_pre_mem
+save_plot(p_pre_mem, "preprocessing_object_size.png", width = 8, height = 4.8)
+```
+
+## 3. Overall Performance on the Reviewer Workload
+
+```{r}
+perf_summary %>%
+  mutate(engine_label = label_engine(engine)) %>%
+  select(engine_label, median_sec, q25_sec, q75_sec, speedup_vs_baseline)
+```
+
+Two different conclusions come out of this table, and they should not be mixed:
+
+1. Default `fast_find_overlaps()` was slower than `GenomicRanges::findOverlaps()`.
+2. Best-throughput `fastRanges` settings were substantially faster than both
+   `findOverlaps()` and `findOverlaps(GNCList(...))`.
+
+```{r}
+p_perf_all <- ggplot(
+  perf_summary %>% mutate(engine_label = label_engine(engine)),
+  aes(x = reorder(engine_label, median_sec), y = median_sec, fill = engine_label)
+) +
+  geom_col(width = 0.72, show.legend = FALSE) +
+  geom_errorbar(aes(ymin = q25_sec, ymax = q75_sec), width = 0.15, linewidth = 0.6) +
+  coord_flip() +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "Runtime on the reviewer's synthetic workload",
+    subtitle = "Lower is better; bars show median runtime and interquartile range",
+    x = NULL,
+    y = "Median runtime (sec)"
+  ) +
+  theme_pub()
+
+p_perf_all
+save_plot(p_perf_all, "reviewer_workload_runtime_all.png", width = 10, height = 7.2)
+```
+
+```{r}
+p_speedup <- ggplot(
+  perf_summary %>%
+    filter(engine != "GenomicRanges_findOverlaps") %>%
+    mutate(engine_label = label_engine(engine)),
+  aes(x = reorder(engine_label, speedup_vs_baseline), y = speedup_vs_baseline, fill = engine_label)
+) +
+  geom_col(width = 0.72, show.legend = FALSE) +
+  geom_hline(yintercept = 1, linetype = 2, color = "grey40") +
+  coord_flip() +
+  scale_y_continuous(labels = label_number(accuracy = 0.01)) +
+  labs(
+    title = "Speedup relative to GenomicRanges::findOverlaps()",
+    subtitle = "Values above 1 indicate faster runtime than the baseline",
+    x = NULL,
+    y = "Speedup (x)"
+  ) +
+  theme_pub()
+
+p_speedup
+save_plot(p_speedup, "reviewer_workload_speedup_vs_findOverlaps.png", width = 10, height = 6.5)
+```
+
+### Interpretation
+
+The workload does not support a blanket statement that `fastRanges` is always
+faster. It supports a narrower, more accurate statement:
+
+- default single-thread deterministic behavior was slower than
+  `GenomicRanges::findOverlaps()`
+- high-throughput `fastRanges` settings were substantially faster
+- the best recorded configuration was `fastRanges indexed`, `threads = 96`,
+  `deterministic = FALSE`
+
+## 4. Deterministic Ordering and Thread Count
+
+This is the most important performance nuance in the result set.
+
+```{r}
+det_aug %>%
+  filter(mode %in% c("direct", "indexed")) %>%
+  arrange(mode, deterministic, threads) %>%
+  select(engine, mode, threads, deterministic, median_sec, speedup_vs_baseline)
+```
+
+```{r}
+p_det_runtime <- ggplot(
+  det_aug %>% filter(mode %in% c("direct", "indexed")),
+  aes(x = threads, y = median_sec, color = mode, linetype = deterministic)
+) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.2) +
+  scale_x_continuous(breaks = c(1, 8, 96)) +
+  scale_color_manual(
+    values = c("direct" = "#D1495B", "indexed" = "#00798C"),
+    labels = c("direct" = "fastRanges direct", "indexed" = "fastRanges indexed")
+  ) +
+  labs(
+    title = "Runtime across thread counts and deterministic settings",
+    subtitle = "The deterministic sort dominates runtime in this captured run",
+    x = "Threads",
+    y = "Median runtime (sec)",
+    color = "Mode",
+    linetype = "deterministic"
+  ) +
+  theme_pub()
+
+p_det_runtime
+save_plot(p_det_runtime, "deterministic_thread_runtime.png", width = 10, height = 6)
+```
+
+```{r}
+speedup_by_mode <- det_aug %>%
+  filter(mode %in% c("direct", "indexed")) %>%
+  group_by(mode, deterministic) %>%
+  mutate(speedup_vs_1_thread = median_sec[threads == 1L] / median_sec) %>%
+  ungroup()
+
+p_det_scaling <- ggplot(
+  speedup_by_mode,
+  aes(x = threads, y = speedup_vs_1_thread, color = mode, linetype = deterministic)
+) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.2) +
+  geom_hline(yintercept = 1, linetype = 2, color = "grey40") +
+  scale_x_continuous(breaks = c(1, 8, 96)) +
+  scale_color_manual(
+    values = c("direct" = "#D1495B", "indexed" = "#00798C"),
+    labels = c("direct" = "fastRanges direct", "indexed" = "fastRanges indexed")
+  ) +
+  labs(
+    title = "Thread scaling relative to 1 thread",
+    subtitle = "Substantial scaling is observed only when deterministic = FALSE",
+    x = "Threads",
+    y = "Speedup vs 1 thread (x)",
+    color = "Mode",
+    linetype = "deterministic"
+  ) +
+  theme_pub()
+
+p_det_scaling
+save_plot(p_det_scaling, "deterministic_thread_scaling.png", width = 10, height = 6)
+```
+
+### Interpretation
+
+This run strongly supports the reviewer's observation that `deterministic`
+matters.
+
+- With `deterministic = TRUE`, runtimes remained in the `~68-82 sec` range even
+  at higher thread counts.
+- With `deterministic = FALSE`, runtime dropped to about `10.4-10.7 sec` at 96
+  threads.
+
+So the defensible statement is not merely that `fastRanges` supports
+multithreading. It is that the package's strongest throughput mode requires
+`deterministic = FALSE`.
+
+## 5. Peak RAM
+
+```{r}
+peak_aug %>%
+  mutate(engine_label = label_engine(engine)) %>%
+  select(engine_label, peak_ram_mb, elapsed_sec)
+```
+
+```{r}
+p_peak_ram <- ggplot(
+  peak_aug %>% mutate(engine_label = label_engine(engine)),
+  aes(x = reorder(engine_label, peak_ram_mb), y = peak_ram_mb, fill = engine_label)
+) +
+  geom_col(width = 0.72, show.legend = FALSE) +
+  coord_flip() +
+  scale_y_continuous(labels = label_number(accuracy = 1)) +
+  labs(
+    title = "Peak RAM by engine configuration",
+    subtitle = "Reported only because peakRAM was available for this run",
+    x = NULL,
+    y = "Peak RAM (MiB)"
+  ) +
+  theme_pub()
+
+p_peak_ram
+save_plot(p_peak_ram, "peak_ram_by_engine.png", width = 10, height = 5.8)
+```
+
+### Interpretation
+
+This captured run does not support a simple claim that `fastRanges` always uses
+substantially more memory than the Bioconductor baselines.
+
+- `fastRanges_default` was the heaviest configuration in this run
+- best-throughput `fastRanges` settings were close to the Bioconductor baselines
+- all non-default configurations clustered in a relatively narrow range around
+  `~3.94-3.97 GiB`
+
+That means the memory story is more nuanced than "fastRanges uses 50% more
+memory". At minimum it depends on configuration.
+
+## 6. Reviewer-Facing Conclusions
+
+The most defensible conclusions from this saved result set are:
+
+1. The captured run still reflects unresolved compatibility gaps at the time it
+   was executed.
+   - `select=` was absent
+   - circular overlap behavior did not match the reference
+   - `GRangesList` was unsupported
+
+2. The reviewer's default-performance concern is supported by this run.
+   - default `fast_find_overlaps()` was slower than `findOverlaps()`
+
+3. The reviewer's broader performance claim is not supported once explicit
+   throughput settings are benchmarked.
+   - `fastRanges indexed`, `threads = 96`, `deterministic = FALSE` achieved a
+     median runtime of about `10.4 sec`
+   - this was about `3.45x` faster than `GenomicRanges::findOverlaps()`
+   - and faster than `findOverlaps(GNCList(...))`
+
+4. The reviewer's deterministic caveat is strongly supported.
+   - high throughput depends on `deterministic = FALSE`
+
+5. Preprocessing cost is not a weakness in this run.
+   - `fast_build_index()` was faster than `GNCList()` construction and produced
+     a smaller object
+
+## Bottom Line
+
+This output set supports a narrow but strong reviewer-response narrative:
+
+- the package state captured here was not yet fully compatible with
+  `findOverlaps()` semantics
+- however, under explicit high-throughput settings, `fastRanges` was clearly
+  faster than the Bioconductor baselines on the reviewer's own synthetic
+  workload
+- the main performance caveat is not lack of threading, but the cost of
+  deterministic ordering
+
+That is the right interpretation to carry forward into a formal reviewer
+response. It is also a good reason to regenerate this assessment after the
+semantic fixes on the current branch, so that the compatibility table reflects
+the updated implementation rather than this older snapshot.
+
