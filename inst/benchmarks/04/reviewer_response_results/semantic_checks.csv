@@ -1,5 +1,0 @@
-"concern","scenario","status","reference_supported","fastRanges_supported","reference_metric","fastRanges_metric","message"
-"empty_ranges","GRanges width-0 overlaps","match",TRUE,TRUE,"1","1",
-"circular_sequences","circular seqinfo wrap-around overlap","mismatch",TRUE,TRUE,"1","0",
-"GRangesList_support","GRangesList query vs GRanges subject","unsupported_or_error",TRUE,FALSE,"3",,"`query` must inherit from IntegerRanges or GenomicRanges"
-"select_argument","presence of select= API argument","missing",TRUE,FALSE,"select in findOverlaps","select missing","fast_find_overlaps() has no select= argument"
