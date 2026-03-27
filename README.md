@@ -110,6 +110,27 @@ system.file("extdata", "subject_genes.bed", package = "fastRanges")
 - `fast_iter_has_next()`, `fast_iter_next()`
 - `fast_iter_reset()`, `fast_iter_collect()`
 
+## Compatibility
+
+`fastRanges` is designed to stay close to Bioconductor overlap semantics for
+supported inputs, but it is currently best viewed as a high-throughput engine
+for `IRanges` and `GRanges`, not as a blanket replacement for every
+`findOverlaps()` input class.
+
+Currently supported:
+
+- `IRanges`
+- `GRanges`
+- `select = "all"`, `"first"`, `"last"`, and `"arbitrary"`
+- empty-range handling with Bioconductor-compatible fallback behavior
+
+Currently unsupported:
+
+- circular genomic sequences
+- `GRangesList`
+
+Unsupported inputs are rejected explicitly with a clear error.
+
 ## Benchmark Highlights
 
 Saved benchmark results on a 96-core Linux server show:
@@ -143,6 +164,8 @@ Benchmark resources:
   times.
 - Use higher `threads` for large workloads on multicore machines.
 - Keep `deterministic = TRUE` when stable output ordering matters.
+- Use `deterministic = FALSE` when maximum multithreaded throughput matters
+  more than stable hit ordering.
 
 ## Documentation
 

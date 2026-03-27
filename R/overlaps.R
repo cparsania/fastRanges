@@ -50,6 +50,13 @@ NULL
 #' @param subject An `IRanges`/`GRanges` object or a `fast_ranges_index`.
 #'   Use `fast_build_index(subject)` when the same subject is reused across
 #'   many overlap queries.
+#' @param select Character scalar controlling whether all hits are returned or
+#'   a single subject match is selected per query.
+#'
+#'   Use `"all"` to return a `Hits` object.
+#'
+#'   Use `"first"`, `"last"`, or `"arbitrary"` to return an integer vector
+#'   with one selected subject index per query and `NA` for queries with no hit.
 #' @template overlap_shared_args
 #' @template overlap_type_details
 #'
@@ -68,7 +75,38 @@ NULL
 #' If you need only counts or a yes/no answer, prefer `fast_count_overlaps()`
 #' or `fast_overlaps_any()`, because they return simpler summaries.
 #'
-#' @return A `S4Vectors::Hits` object.
+#' Compatibility notes:
+#'
+#' `fastRanges` aims to stay close to Bioconductor overlap semantics for
+#' supported inputs, and its outputs are routinely validated against
+#' `IRanges::findOverlaps()` / `GenomicRanges::findOverlaps()`.
+#'
+#' Currently supported core input types are `IRanges` and `GRanges`.
+#'
+#' Empty-range semantics are delegated to Bioconductor-compatible reference
+#' behavior.
+#'
+#' Circular genomic sequences are not currently supported and will raise an
+#' explicit error.
+#'
+#' `GRangesList` inputs are not currently supported and will raise an explicit
+#' error.
+#'
+#' Performance notes:
+#'
+#' For one-off overlap calls, use the raw `subject`.
+#'
+#' For repeated-query or throughput-oriented workloads, build a reusable index
+#' once with `fast_build_index(subject)` and pass that index as `subject`.
+#'
+#' For maximum multithreaded throughput, consider `deterministic = FALSE` when
+#' output order is not important.
+#'
+#' @return
+#' If `select = "all"`, a `S4Vectors::Hits` object.
+#'
+#' Otherwise, an integer vector of length `length(query)` containing one
+#' selected subject index per query and `NA` when no subject matched.
 #' @export
 #'
 #' @examples
@@ -79,12 +117,42 @@ NULL
 fast_find_overlaps <- function(
     query,
     subject,
+    select = c("all", "first", "last", "arbitrary"),
     max_gap = -1L,
     min_overlap = 0L,
     type = c("any", "start", "end", "within", "equal"),
     ignore_strand = FALSE,
     threads = fast_default_threads(),
     deterministic = TRUE) {
+  select <- match.arg(select)
+  .assert_supported_ranges(query, "query")
+  .assert_no_circular_ranges(query, "query")
+  if (inherits(subject, "fast_ranges_index")) {
+    if (isTRUE(subject$has_circular_sequences)) {
+      stop("`subject` contains circular sequences, which are not currently supported", call. = FALSE)
+    }
+  } else {
+    .assert_supported_ranges(subject, "subject")
+    .assert_no_circular_ranges(subject, "subject")
+  }
+  query_has_empty <- .has_empty_ranges(query)
+  subject_has_empty <- if (inherits(subject, "fast_ranges_index")) {
+    isTRUE(subject$has_empty_ranges)
+  } else {
+    .has_empty_ranges(subject)
+  }
+  if (query_has_empty || subject_has_empty) {
+    subject_ref <- if (inherits(subject, "fast_ranges_index")) .restore_subject_from_index(subject) else subject
+    return(.find_overlaps_reference(
+      query = query,
+      subject = subject_ref,
+      select = select,
+      max_gap = max_gap,
+      min_overlap = min_overlap,
+      type = type,
+      ignore_strand = ignore_strand
+    ))
+  }
   inputs <- .prepare_overlap_inputs(
     query = query,
     subject = subject,
@@ -121,13 +189,43 @@ fast_find_overlaps <- function(
     deterministic = isTRUE(deterministic)
   )
 
-  S4Vectors::Hits(
+  hits <- S4Vectors::Hits(
     from = hit_idx$query_hits,
     to = hit_idx$subject_hits,
     nLnode = length(query),
     nRnode = inputs$subject_n,
     sort.by.query = FALSE
   )
+
+  if (identical(select, "all")) {
+    return(hits)
+  }
+
+  .select_from_hits(hits, select = select, query_n = length(query))
+}
+
+#' @keywords internal
+.select_from_hits <- function(hits, select, query_n) {
+  select <- match.arg(select, c("first", "last", "arbitrary"))
+  out <- rep.int(NA_integer_, query_n)
+  if (length(hits) == 0L || query_n == 0L) {
+    return(out)
+  }
+
+  qh <- S4Vectors::queryHits(hits)
+  sh <- S4Vectors::subjectHits(hits)
+  ord <- order(qh, sh)
+  qh <- qh[ord]
+  sh <- sh[ord]
+
+  if (identical(select, "last")) {
+    keep <- !duplicated(qh, fromLast = TRUE)
+  } else {
+    keep <- !duplicated(qh)
+  }
+
+  out[qh[keep]] <- sh[keep]
+  out
 }
 
 #' Count Overlaps
@@ -164,6 +262,33 @@ fast_count_overlaps <- function(
     threads = fast_default_threads(),
     deterministic = TRUE) {
   .assert_scalar_logical(deterministic, "deterministic")
+  .assert_supported_ranges(query, "query")
+  .assert_no_circular_ranges(query, "query")
+  if (inherits(subject, "fast_ranges_index")) {
+    if (isTRUE(subject$has_circular_sequences)) {
+      stop("`subject` contains circular sequences, which are not currently supported", call. = FALSE)
+    }
+  } else {
+    .assert_supported_ranges(subject, "subject")
+    .assert_no_circular_ranges(subject, "subject")
+  }
+  query_has_empty <- .has_empty_ranges(query)
+  subject_has_empty <- if (inherits(subject, "fast_ranges_index")) {
+    isTRUE(subject$has_empty_ranges)
+  } else {
+    .has_empty_ranges(subject)
+  }
+  if (query_has_empty || subject_has_empty) {
+    subject_ref <- if (inherits(subject, "fast_ranges_index")) .restore_subject_from_index(subject) else subject
+    return(.count_overlaps_reference(
+      query = query,
+      subject = subject_ref,
+      max_gap = max_gap,
+      min_overlap = min_overlap,
+      type = type,
+      ignore_strand = ignore_strand
+    ))
+  }
   inputs <- .prepare_overlap_inputs(
     query = query,
     subject = subject,

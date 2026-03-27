@@ -49,10 +49,15 @@
 #'   For repeated-query workloads, combine a prebuilt index from
 #'   `fast_build_index(subject)` with a thread count chosen empirically on your
 #'   hardware.
+#'
+#'   `fastRanges` is optimized for large and throughput-oriented workloads.
+#'   For one-off or small jobs, Bioconductor's native overlap routines may be
+#'   competitive.
 #' @param deterministic Logical scalar controlling output order.
 #'
 #'   `TRUE` returns a stable order, which is useful for testing, reproducible
 #'   reports, and direct comparison across thread counts.
 #'
 #'   `FALSE` allows the implementation to return hits in an unspecified order,
-#'   which can be slightly faster for large jobs.
+#'   which can be noticeably faster for large multithreaded jobs because it
+#'   avoids extra global ordering work.

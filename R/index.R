@@ -25,12 +25,15 @@
 #' idx
 fast_build_index <- function(subject) {
   .assert_supported_ranges(subject, "subject")
+  .assert_no_circular_ranges(subject, "subject")
 
   sorted <- ._add_block_index_fields(.build_sorted_subject_vectors(subject))
   structure(
     c(sorted, list(
       subject_n = length(subject),
-      subject_class = class(subject)
+      subject_class = class(subject),
+      has_empty_ranges = .has_empty_ranges(subject),
+      has_circular_sequences = FALSE
     )),
     class = "fast_ranges_index"
   )

@@ -5,16 +5,19 @@
 
 #' @keywords internal
 .is_granges <- function(x) {
-  methods::is(x, "GenomicRanges")
+  isTRUE(methods::is(x, "GenomicRanges"))
 }
 
 #' @keywords internal
 .is_iranges <- function(x) {
-  methods::is(x, "IntegerRanges")
+  isTRUE(methods::is(x, "IntegerRanges"))
 }
 
 #' @keywords internal
 .assert_supported_ranges <- function(x, arg_name) {
+  if (isTRUE(methods::is(x, "GenomicRangesList"))) {
+    stop(sprintf("`%s` must not be a GRangesList; GRangesList is not currently supported", arg_name), call. = FALSE)
+  }
   if (!(.is_granges(x) || .is_iranges(x))) {
     stop(sprintf("`%s` must inherit from IntegerRanges or GenomicRanges", arg_name), call. = FALSE)
   }
@@ -71,6 +74,131 @@
     return(query[FALSE])
   }
   stop("Unsupported query class", call. = FALSE)
+}
+
+#' @keywords internal
+.has_empty_ranges <- function(x) {
+  isTRUE(any(IRanges::width(x) == 0L))
+}
+
+#' @keywords internal
+.has_circular_sequences <- function(x) {
+  if (!.is_granges(x) || length(x) == 0L) {
+    return(FALSE)
+  }
+  si <- GenomeInfoDb::seqinfo(x)
+  flags <- GenomeInfoDb::isCircular(si)
+  used <- unique(as.character(GenomicRanges::seqnames(x)))
+  if (length(used) == 0L) {
+    return(FALSE)
+  }
+  any(flags[used] %in% TRUE)
+}
+
+#' @keywords internal
+.assert_no_circular_ranges <- function(x, arg_name) {
+  if (.has_circular_sequences(x)) {
+    stop(sprintf("`%s` contains circular sequences, which are not currently supported", arg_name), call. = FALSE)
+  }
+}
+
+#' @keywords internal
+.restore_subject_from_index <- function(index) {
+  .assert_fast_ranges_index(index, "index")
+
+  n <- as.integer(index$subject_n)
+  if (n == 0L) {
+    if ("GRanges" %in% index$subject_class || "GenomicRanges" %in% index$subject_class) {
+      return(GenomicRanges::GRanges())
+    }
+    return(IRanges::IRanges())
+  }
+
+  ord <- as.integer(index$subject_original_index)
+  start <- integer(n)
+  end <- integer(n)
+  seq_id <- integer(n)
+  strand_id <- integer(n)
+
+  start[ord] <- as.integer(index$subject_start)
+  end[ord] <- as.integer(index$subject_end)
+  seq_id[ord] <- as.integer(index$subject_seq)
+  strand_id[ord] <- as.integer(index$subject_strand)
+
+  if ("GRanges" %in% index$subject_class || "GenomicRanges" %in% index$subject_class) {
+    seq_levels <- index$seq_levels
+    seqnames <- seq_levels[seq_id]
+    strand <- rep.int("*", n)
+    strand[strand_id == 1L] <- "+"
+    strand[strand_id == 2L] <- "-"
+    return(GenomicRanges::GRanges(
+      seqnames = seqnames,
+      ranges = IRanges::IRanges(start = start, end = end),
+      strand = strand
+    ))
+  }
+
+  IRanges::IRanges(start = start, end = end)
+}
+
+#' @keywords internal
+.find_overlaps_reference <- function(
+    query,
+    subject,
+    select = c("all", "first", "last", "arbitrary"),
+    max_gap = -1L,
+    min_overlap = 0L,
+    type = c("any", "start", "end", "within", "equal"),
+    ignore_strand = FALSE) {
+  select <- match.arg(select)
+  type <- match.arg(type)
+
+  if (.is_granges(query) || .is_granges(subject)) {
+    return(GenomicRanges::findOverlaps(
+      query, subject,
+      maxgap = max_gap,
+      minoverlap = min_overlap,
+      type = type,
+      select = select,
+      ignore.strand = ignore_strand
+    ))
+  }
+
+  IRanges::findOverlaps(
+    query, subject,
+    maxgap = max_gap,
+    minoverlap = min_overlap,
+    type = type,
+    select = select
+  )
+}
+
+#' @keywords internal
+.count_overlaps_reference <- function(
+    query,
+    subject,
+    max_gap = -1L,
+    min_overlap = 0L,
+    type = c("any", "start", "end", "within", "equal"),
+    ignore_strand = FALSE) {
+  type <- match.arg(type)
+
+  if (.is_granges(query) || .is_granges(subject)) {
+    return(GenomicRanges::countOverlaps(
+      query, subject,
+      maxgap = max_gap,
+      minoverlap = min_overlap,
+      type = type,
+      ignore.strand = ignore_strand
+    ))
+  }
+
+  IRanges::countOverlaps(
+    query, subject,
+    maxgap = max_gap,
+    minoverlap = min_overlap,
+    type = type
+  )
 }
 
 #' Default Thread Count

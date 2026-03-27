@@ -66,7 +66,7 @@ test_that("overlap iterator collects the same hits as direct call", {
 })
 
 test_that("index save/load/stats round-trip works", {
-  s <- IRanges::IRanges(start = c(3, 9, 18), width = c(4, 6, 5))
+  s <- IRanges::IRanges(start = c(3, 9, 18, 30), end = c(6, 14, 22, 29))
   idx <- fast_build_index(s)
   path <- tempfile(fileext = ".rds")
   on.exit(unlink(path), add = TRUE)
@@ -76,12 +76,24 @@ test_that("index save/load/stats round-trip works", {
 
   expect_s3_class(idx2, "fast_ranges_index")
   expect_equal(idx2$subject_n, idx$subject_n)
+  expect_identical(idx$has_empty_ranges, TRUE)
+  expect_identical(idx2$has_empty_ranges, TRUE)
+  expect_identical(idx$has_circular_sequences, FALSE)
+  expect_identical(idx2$has_circular_sequences, FALSE)
 
   stats <- fast_index_stats(idx2)
   expect_true(all(c("subject_n", "partition_n", "seqlevel_n", "index_size_mb") %in% names(stats)))
 
   detailed <- fast_index_stats(idx2, detailed = TRUE)
   expect_true(all(c("summary", "partitions") %in% names(detailed)))
+
+  legacy_idx <- idx
+  legacy_idx$has_empty_ranges <- NULL
+  legacy_idx$has_circular_sequences <- NULL
+  saveRDS(legacy_idx, path)
+  idx3 <- fast_load_index(path)
+  expect_identical(idx3$has_empty_ranges, TRUE)
+  expect_identical(idx3$has_circular_sequences, FALSE)
 })
 
 test_that("fast_gaps matches GenomicRanges when GRanges bounds are implicit", {

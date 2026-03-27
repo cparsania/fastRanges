@@ -20,6 +20,53 @@ canon_hits <- function(h) {
   x[order(x[, 1], x[, 2]), , drop = FALSE]
 }
 
+validate_select_result <- function(selected, ref_all_hits, query_n, mode = c("first", "last", "arbitrary")) {
+  mode <- match.arg(mode)
+  if (!is.integer(selected)) {
+    return(FALSE)
+  }
+  if (length(selected) != query_n) {
+    return(FALSE)
+  }
+
+  qh <- S4Vectors::queryHits(ref_all_hits)
+  sh <- S4Vectors::subjectHits(ref_all_hits)
+  ref_choices <- split(sh, qh)
+  has_hit <- rep.int(FALSE, query_n)
+  if (length(ref_choices) > 0L) {
+    has_hit[as.integer(names(ref_choices))] <- TRUE
+  }
+
+  if (!identical(is.na(selected), !has_hit)) {
+    return(FALSE)
+  }
+  if (!any(has_hit)) {
+    return(TRUE)
+  }
+
+  for (qid in which(has_hit)) {
+    choices <- ref_choices[[as.character(qid)]]
+    if (is.null(choices) || length(choices) == 0L) {
+      return(FALSE)
+    }
+    got <- selected[[qid]]
+    if (is.na(got)) {
+      return(FALSE)
+    }
+    if (identical(mode, "first") && !identical(as.integer(got), as.integer(min(choices)))) {
+      return(FALSE)
+    }
+    if (identical(mode, "last") && !identical(as.integer(got), as.integer(max(choices)))) {
+      return(FALSE)
+    }
+    if (identical(mode, "arbitrary") && !(got %in% choices)) {
+      return(FALSE)
+    }
+  }
+
+  TRUE
+}
+
 same_partition <- function(x, y) {
   if (length(x) != length(y)) {
     return(FALSE)
@@ -507,6 +554,98 @@ if (!identical(fastRanges::fast_follow(xi, yi, threads = threads), IRanges::foll
   stop("Mismatch: fast_follow IRanges")
 }
 
+q0g <- GenomicRanges::GRanges(
+  "chr1",
+  IRanges::IRanges(start = c(5L, 8L, 12L, 20L), end = c(4L, 10L, 11L, 23L))
+)
+s0g <- GenomicRanges::GRanges(
+  "chr1",
+  IRanges::IRanges(start = c(3L, 5L, 8L, 12L, 19L), end = c(6L, 4L, 10L, 11L, 21L))
+)
+idx0g <- fastRanges::fast_build_index(s0g)
+ref0g <- GenomicRanges::findOverlaps(q0g, s0g)
+got0g_direct <- fastRanges::fast_find_overlaps(q0g, s0g, threads = threads)
+got0g_index <- fastRanges::fast_find_overlaps(q0g, idx0g, threads = threads)
+if (!isTRUE(all.equal(canon_hits(got0g_direct), canon_hits(ref0g), check.attributes = FALSE))) {
+  stop("Mismatch: fast_find_overlaps direct empty-width GRanges")
+}
+if (!isTRUE(all.equal(canon_hits(got0g_index), canon_hits(ref0g), check.attributes = FALSE))) {
+  stop("Mismatch: fast_find_overlaps indexed empty-width GRanges")
+}
+for (sel in c("first", "last")) {
+  ref0g_sel <- GenomicRanges::findOverlaps(q0g, s0g, select = sel)
+  got0g_sel_direct <- fastRanges::fast_find_overlaps(q0g, s0g, select = sel, threads = threads)
+  got0g_sel_index <- fastRanges::fast_find_overlaps(q0g, idx0g, select = sel, threads = threads)
+  if (!identical(got0g_sel_direct, ref0g_sel)) {
+    stop("Mismatch: fast_find_overlaps direct empty-width GRanges select=", sel)
+  }
+  if (!identical(got0g_sel_index, ref0g_sel)) {
+    stop("Mismatch: fast_find_overlaps indexed empty-width GRanges select=", sel)
+  }
+}
+if (!validate_select_result(fastRanges::fast_find_overlaps(q0g, s0g, select = "arbitrary", threads = threads), ref0g, length(q0g), mode = "arbitrary")) {
+  stop("Mismatch: fast_find_overlaps direct empty-width GRanges select=arbitrary")
+}
+if (!validate_select_result(fastRanges::fast_find_overlaps(q0g, idx0g, select = "arbitrary", threads = threads), ref0g, length(q0g), mode = "arbitrary")) {
+  stop("Mismatch: fast_find_overlaps indexed empty-width GRanges select=arbitrary")
+}
+ref0g_count <- GenomicRanges::countOverlaps(q0g, s0g)
+if (!identical(as.integer(fastRanges::fast_count_overlaps(q0g, s0g, threads = threads)), as.integer(ref0g_count))) {
+  stop("Mismatch: fast_count_overlaps direct empty-width GRanges")
+}
+if (!identical(as.integer(fastRanges::fast_count_overlaps(q0g, idx0g, threads = threads)), as.integer(ref0g_count))) {
+  stop("Mismatch: fast_count_overlaps indexed empty-width GRanges")
+}
+if (!identical(as.logical(fastRanges::fast_overlaps_any(q0g, s0g, threads = threads)), ref0g_count > 0L)) {
+  stop("Mismatch: fast_overlaps_any direct empty-width GRanges")
+}
+if (!identical(as.logical(fastRanges::fast_overlaps_any(q0g, idx0g, threads = threads)), ref0g_count > 0L)) {
+  stop("Mismatch: fast_overlaps_any indexed empty-width GRanges")
+}
+
+q0i <- IRanges::IRanges(start = c(5L, 8L, 12L, 20L), end = c(4L, 10L, 11L, 23L))
+s0i <- IRanges::IRanges(start = c(3L, 5L, 8L, 12L, 19L), end = c(6L, 4L, 10L, 11L, 21L))
+idx0i <- fastRanges::fast_build_index(s0i)
+ref0i <- IRanges::findOverlaps(q0i, s0i)
+got0i_direct <- fastRanges::fast_find_overlaps(q0i, s0i, threads = threads)
+got0i_index <- fastRanges::fast_find_overlaps(q0i, idx0i, threads = threads)
+if (!isTRUE(all.equal(canon_hits(got0i_direct), canon_hits(ref0i), check.attributes = FALSE))) {
+  stop("Mismatch: fast_find_overlaps direct empty-width IRanges")
+}
+if (!isTRUE(all.equal(canon_hits(got0i_index), canon_hits(ref0i), check.attributes = FALSE))) {
+  stop("Mismatch: fast_find_overlaps indexed empty-width IRanges")
+}
+for (sel in c("first", "last")) {
+  ref0i_sel <- IRanges::findOverlaps(q0i, s0i, select = sel)
+  got0i_sel_direct <- fastRanges::fast_find_overlaps(q0i, s0i, select = sel, threads = threads)
+  got0i_sel_index <- fastRanges::fast_find_overlaps(q0i, idx0i, select = sel, threads = threads)
+  if (!identical(got0i_sel_direct, ref0i_sel)) {
+    stop("Mismatch: fast_find_overlaps direct empty-width IRanges select=", sel)
+  }
+  if (!identical(got0i_sel_index, ref0i_sel)) {
+    stop("Mismatch: fast_find_overlaps indexed empty-width IRanges select=", sel)
+  }
+}
+if (!validate_select_result(fastRanges::fast_find_overlaps(q0i, s0i, select = "arbitrary", threads = threads), ref0i, length(q0i), mode = "arbitrary")) {
+  stop("Mismatch: fast_find_overlaps direct empty-width IRanges select=arbitrary")
+}
+if (!validate_select_result(fastRanges::fast_find_overlaps(q0i, idx0i, select = "arbitrary", threads = threads), ref0i, length(q0i), mode = "arbitrary")) {
+  stop("Mismatch: fast_find_overlaps indexed empty-width IRanges select=arbitrary")
+}
+ref0i_count <- IRanges::countOverlaps(q0i, s0i)
+if (!identical(as.integer(fastRanges::fast_count_overlaps(q0i, s0i, threads = threads)), as.integer(ref0i_count))) {
+  stop("Mismatch: fast_count_overlaps direct empty-width IRanges")
+}
+if (!identical(as.integer(fastRanges::fast_count_overlaps(q0i, idx0i, threads = threads)), as.integer(ref0i_count))) {
+  stop("Mismatch: fast_count_overlaps indexed empty-width IRanges")
+}
+if (!identical(as.logical(fastRanges::fast_overlaps_any(q0i, s0i, threads = threads)), ref0i_count > 0L)) {
+  stop("Mismatch: fast_overlaps_any direct empty-width IRanges")
+}
+if (!identical(as.logical(fastRanges::fast_overlaps_any(q0i, idx0i, threads = threads)), ref0i_count > 0L)) {
+  stop("Mismatch: fast_overlaps_any indexed empty-width IRanges")
+}
+
 for (iter in seq_len(n_iter)) {
   qg <- make_granges(q_gr_n, seed + iter * 10L)
   sg <- make_granges(s_gr_n, seed + iter * 10L + 1L)
@@ -553,6 +692,74 @@ for (iter in seq_len(n_iter)) {
           }
           if (!isTRUE(all.equal(canon_hits(got_index), canon_hits(ref), check.attributes = FALSE))) {
             stop("Mismatch: fast_find_overlaps index vs GenomicRanges at iter=", iter,
+                 " ignore_strand=", ignore_strand,
+                 " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          }
+
+          for (sel in c("first", "last")) {
+            ref_sel <- GenomicRanges::findOverlaps(
+              qg, sg,
+              maxgap = max_gap,
+              minoverlap = min_overlap,
+              type = type,
+              ignore.strand = ignore_strand,
+              select = sel
+            )
+            got_sel_direct <- fastRanges::fast_find_overlaps(
+              qg, sg,
+              select = sel,
+              max_gap = max_gap,
+              min_overlap = min_overlap,
+              type = type,
+              ignore_strand = ignore_strand,
+              threads = threads
+            )
+            got_sel_index <- fastRanges::fast_find_overlaps(
+              qg, idx,
+              select = sel,
+              max_gap = max_gap,
+              min_overlap = min_overlap,
+              type = type,
+              ignore_strand = ignore_strand,
+              threads = threads
+            )
+            if (!identical(got_sel_direct, ref_sel)) {
+              stop("Mismatch: fast_find_overlaps select=", sel, " direct vs GenomicRanges at iter=", iter,
+                   " ignore_strand=", ignore_strand,
+                   " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+            }
+            if (!identical(got_sel_index, ref_sel)) {
+              stop("Mismatch: fast_find_overlaps select=", sel, " index vs GenomicRanges at iter=", iter,
+                   " ignore_strand=", ignore_strand,
+                   " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+            }
+          }
+
+          got_sel_arb_direct <- fastRanges::fast_find_overlaps(
+            qg, sg,
+            select = "arbitrary",
+            max_gap = max_gap,
+            min_overlap = min_overlap,
+            type = type,
+            ignore_strand = ignore_strand,
+            threads = threads
+          )
+          got_sel_arb_index <- fastRanges::fast_find_overlaps(
+            qg, idx,
+            select = "arbitrary",
+            max_gap = max_gap,
+            min_overlap = min_overlap,
+            type = type,
+            ignore_strand = ignore_strand,
+            threads = threads
+          )
+          if (!validate_select_result(got_sel_arb_direct, ref, length(qg), mode = "arbitrary")) {
+            stop("Mismatch: fast_find_overlaps select=arbitrary direct semantic validity at iter=", iter,
+                 " ignore_strand=", ignore_strand,
+                 " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
+          }
+          if (!validate_select_result(got_sel_arb_index, ref, length(qg), mode = "arbitrary")) {
+            stop("Mismatch: fast_find_overlaps select=arbitrary index semantic validity at iter=", iter,
                  " ignore_strand=", ignore_strand,
                  " type=", type, " max_gap=", max_gap, " min_overlap=", min_overlap)
           }
@@ -845,6 +1052,17 @@ for (iter in seq_len(n_iter)) {
   got_i <- fastRanges::fast_find_overlaps(qi, si, threads = threads)
   if (!isTRUE(all.equal(canon_hits(got_i), canon_hits(ref_i), check.attributes = FALSE))) {
     stop("Mismatch: fast_find_overlaps IRanges at iter=", iter)
+  }
+  for (sel in c("first", "last")) {
+    ref_sel_i <- IRanges::findOverlaps(qi, si, select = sel)
+    got_sel_i <- fastRanges::fast_find_overlaps(qi, si, select = sel, threads = threads)
+    if (!identical(got_sel_i, ref_sel_i)) {
+      stop("Mismatch: fast_find_overlaps IRanges select=", sel, " at iter=", iter)
+    }
+  }
+  got_sel_i_arb <- fastRanges::fast_find_overlaps(qi, si, select = "arbitrary", threads = threads)
+  if (!validate_select_result(got_sel_i_arb, ref_i, length(qi), mode = "arbitrary")) {
+    stop("Mismatch: fast_find_overlaps IRanges select=arbitrary semantic validity at iter=", iter)
   }
 
   message("iter ", iter, "/", n_iter, " OK")
