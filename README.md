@@ -1,6 +1,6 @@
 # fastRanges
 
-[![R-CMD-check](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml) [![Codecov test coverage](https://codecov.io/gh/cparsania/fastRanges/branch/main/graph/badge.svg)](https://app.codecov.io/gh/cparsania/fastRanges) [![pkgdown site](https://img.shields.io/badge/pkgdown-site-blue)](https://cparsania.github.io/fastRanges/) [![Bioconductor](https://img.shields.io/badge/Bioconductor-coming_soon-lightgrey)](https://bioconductor.org/)
+[![R-CMD-check](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml) [![Codecov test coverage](https://codecov.io/gh/cparsania/fastRanges/branch/main/graph/badge.svg)](https://app.codecov.io/gh/cparsania/fastRanges) [![pkgdown site](https://img.shields.io/badge/pkgdown-site-blue)](https://cparsania.github.io/fastRanges/) [![Bioconductor](https://img.shields.io/badge/Bioconductor-published-green)](https://bioconductor.org/packages/release/bioc/html/fastRanges.html)
 
 `fastRanges` is a multithreaded interval engine for `IRanges` and `GRanges`. It keeps Bioconductor-style overlap semantics and familiar argument grammar while targeting the workloads that usually dominate runtime in genomics: large `findOverlaps()` jobs, repeated query batches against one subject, and overlap-derived summaries such as counts, joins, and aggregation.
 
