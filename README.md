@@ -1,4 +1,6 @@
-# fastRanges
+# fastRanges <a href="https://cparsania.github.io/fastRanges"><img src="man/figures/logo.png" align="right" height="240" alt="fastRanges website" /></a>
+
+> Deterministic Multithreaded Genomic Interval Operations 
 
 [![R-CMD-check](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/cparsania/fastRanges/actions/workflows/R-CMD-check.yaml) [![Codecov test coverage](https://codecov.io/gh/cparsania/fastRanges/branch/main/graph/badge.svg)](https://app.codecov.io/gh/cparsania/fastRanges) [![pkgdown site](https://img.shields.io/badge/pkgdown-site-blue)](https://cparsania.github.io/fastRanges/) [![Bioconductor](https://img.shields.io/badge/Bioconductor-published-green)](https://bioconductor.org/packages/release/bioc/html/fastRanges.html)
 
